@@ -1,0 +1,108 @@
+[project]
+name = "midifier"
+version = "0.1.0"
+description = "Audio to multi-track General MIDI, over a REST and MCP API"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+
+dependencies = [
+    "fastapi>=0.136",
+    "uvicorn[standard]>=0.48",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+    "python-multipart>=0.0.20",
+    "httpx>=0.28",
+    "minio>=7.2.20",
+    "prometheus-client>=0.25",
+    "fastmcp>=3.4.4",
+    "pretty-midi>=0.2.11",
+    "mido>=1.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "mypy>=1.14",
+    "ruff>=0.8",
+    "pre-commit>=4.0",
+    "types-requests>=2.32",
+]
+
+[project.scripts]
+midifier = "midifier.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/midifier"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["src", "tests"]
+# scripts/ holds throwaway spike prototypes kept for reference, not shipped code.
+extend-exclude = ["scripts"]
+
+[tool.ruff.lint]
+select = [
+    "A",     # builtin shadowing
+    "B",     # bugbear
+    "C4",    # comprehensions
+    "D417",  # documented arguments
+    "E",     # pycodestyle errors
+    "F",     # pyflakes
+    "I",     # import sorting
+    "ICN",   # import conventions
+    "N",     # naming
+    "PIE",   # misc lints
+    "RUF",   # ruff rules
+    "SIM",   # simplify
+    "TC",    # type-checking blocks
+    "UP",    # pyupgrade
+    "W",     # pycodestyle warnings
+]
+ignore = ["A002"]
+
+[tool.ruff.lint.isort]
+force-single-line = true
+known-first-party = ["midifier"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_any_generics = true
+no_implicit_optional = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["pretty_midi.*", "minio.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+markers = [
+    "e2e: needs the transcription model and real audio; skipped unless MIDIFIER_E2E=1",
+]
+
+[tool.coverage.run]
+source = ["src/midifier"]
+omit = ["*/__main__.py"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

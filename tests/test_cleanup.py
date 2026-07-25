@@ -1,0 +1,97 @@
+"""The cleanup rules are pure functions over notes, so they are tested exactly."""
+
+from __future__ import annotations
+
+import pretty_midi
+
+from midifier.midi.cleanup import clean
+from midifier.midi.cleanup import merge_held
+from midifier.midi.cleanup import trim_loops
+from midifier.midi.cleanup import trim_overrun
+
+from .conftest import note
+
+
+def _midi(notes: list[pretty_midi.Note], *, is_drum: bool = False) -> pretty_midi.PrettyMIDI:
+    midi = pretty_midi.PrettyMIDI(initial_tempo=120.0)
+    instrument = pretty_midi.Instrument(program=0, is_drum=is_drum, name="test")
+    instrument.notes.extend(notes)
+    midi.instruments.append(instrument)
+    return midi
+
+
+class TestTrimOverrun:
+    def test_drops_notes_starting_after_the_audio(self) -> None:
+        midi = _midi([note(60, 1.0, 1.5), note(60, 30.0, 30.5)])
+        assert trim_overrun(midi, duration=10.0) == 1
+        assert len(midi.instruments[0].notes) == 1
+
+    def test_clamps_a_note_still_sounding_at_the_end(self) -> None:
+        midi = _midi([note(60, 9.0, 30.0)])
+        trim_overrun(midi, duration=10.0)
+        assert midi.instruments[0].notes[0].end == 10.5  # duration + END_TOLERANCE
+
+    def test_keeps_a_final_chord_ringing_within_tolerance(self) -> None:
+        midi = _midi([note(60, 10.2, 10.4)])
+        assert trim_overrun(midi, duration=10.0) == 0
+
+
+class TestMergeHeld:
+    def test_joins_touching_notes_of_the_same_pitch(self) -> None:
+        midi = _midi([note(60, 0.0, 0.23), note(60, 0.23, 0.46), note(60, 0.46, 0.69)])
+        assert merge_held(midi, max_gap=0.05, max_length=1.0) == 2
+        (merged,) = midi.instruments[0].notes
+        assert merged.start == 0.0
+        assert merged.end == 0.69
+
+    def test_leaves_a_real_gap_alone(self) -> None:
+        midi = _midi([note(60, 0.0, 0.2), note(60, 1.0, 1.2)])
+        assert merge_held(midi, max_gap=0.05, max_length=1.0) == 0
+        assert len(midi.instruments[0].notes) == 2
+
+    def test_refuses_to_invent_a_long_sustain(self) -> None:
+        """The cap is what stops a whole phrase fusing into one implausible note."""
+        notes = [note(60, index * 0.2, index * 0.2 + 0.2) for index in range(10)]
+        merge_held(_midi(notes), max_gap=0.05, max_length=0.5)
+        rebuilt = _midi([note(60, index * 0.2, index * 0.2 + 0.2) for index in range(10)])
+        merge_held(rebuilt, max_gap=0.05, max_length=0.5)
+        assert all(n.end - n.start <= 0.5 + 1e-9 for n in rebuilt.instruments[0].notes)
+
+    def test_different_pitches_never_merge(self) -> None:
+        midi = _midi([note(60, 0.0, 0.2), note(62, 0.2, 0.4)])
+        assert merge_held(midi) == 0
+
+    def test_percussion_is_left_alone(self) -> None:
+        midi = _midi([note(36, 0.0, 0.05), note(36, 0.05, 0.1)], is_drum=True)
+        assert merge_held(midi) == 0
+
+
+class TestTrimLoops:
+    def test_cuts_a_stuck_single_pitch(self) -> None:
+        notes = [note(60, index * 0.25, index * 0.25 + 0.2) for index in range(40)]
+        assert trim_loops(_midi(notes), max_cycles=8) > 0
+
+    def test_cuts_a_repeating_two_note_figure(self) -> None:
+        """A same-pitch counter never fires on A-B-A-B; periodicity does."""
+        notes = []
+        for index in range(60):
+            pitch = 60 if index % 2 == 0 else 64
+            notes.append(note(pitch, index * 0.25, index * 0.25 + 0.2))
+        assert trim_loops(_midi(notes), max_cycles=8) > 0
+
+    def test_leaves_ordinary_playing_alone(self) -> None:
+        notes = [note(60 + (index % 7), index * 0.25, index * 0.25 + 0.2) for index in range(30)]
+        assert trim_loops(_midi(notes), max_cycles=8) == 0
+
+
+class TestClean:
+    def test_reports_what_it_changed(self) -> None:
+        notes = [note(60, 0.0, 0.23), note(60, 0.23, 0.46), note(60, 99.0, 99.5)]
+        report = clean(_midi(notes), duration=10.0)
+        assert report.trimmed_past_end == 1
+        assert report.merged_rearticulations == 1
+        assert report.notes_after < report.notes_before
+
+    def test_is_safe_on_an_empty_file(self) -> None:
+        report = clean(pretty_midi.PrettyMIDI(), duration=10.0)
+        assert report.notes_before == report.notes_after == 0
