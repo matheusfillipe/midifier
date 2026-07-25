@@ -1,0 +1,65 @@
+# GPU image. The CPU image (./Dockerfile) is fine for the API, but transcription on a
+# processor runs at roughly twenty times the length of the song on a shared node, so the
+# worker needs this one.
+#
+# Size matters here. A stock ROCm image carries kernels for every AMD architecture and
+# lands near 34GB; TheRock publishes per-family indexes, and building against gfx110X
+# alone brings the whole environment to about 5.4GB.
+FROM python:3.12-slim
+
+# libatomic is what torch's ROCm loader dlopens first; without it the import fails with a
+# missing-library error that reads nothing like the real cause.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ffmpeg \
+        libatomic1 \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+ENV VIRTUAL_ENV=/opt/venv \
+    PATH=/opt/venv/bin:$PATH \
+    # The gfx1103 APU does not support the virtual-memory reservation APIs this uses, and
+    # with it enabled every allocation fails as out-of-memory while reporting the whole
+    # GTT pool free. This single variable is the difference between the GPU working and not.
+    PYTORCH_HIP_ALLOC_CONF=expandable_segments:False
+
+RUN uv venv $VIRTUAL_ENV
+
+# gfx110X only. Not the multi-arch index, which is what makes these images enormous.
+RUN uv pip install --index-url https://rocm.nightlies.amd.com/v2/gfx110X-all/ \
+        torch \
+        torchaudio
+
+# muscriptor pulls its own torch, which would replace the ROCm build with a CPU one, so
+# its dependencies are installed explicitly instead.
+RUN uv pip install --no-deps muscriptor && \
+    uv pip install \
+        einops \
+        huggingface-hub \
+        mido \
+        numpy \
+        packaging \
+        python-multipart \
+        safetensors \
+        soundfile \
+        typer
+
+WORKDIR /app
+COPY pyproject.toml uv.lock ./
+RUN uv pip install --no-deps fastapi "uvicorn[standard]" pydantic pydantic-settings \
+        httpx minio prometheus-client fastmcp pretty-midi
+
+COPY . .
+RUN uv pip install --no-deps -e .
+
+RUN adduser --system app && chown -R app /app /opt/venv
+USER app
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8000/v1/health || exit 1
+
+CMD ["python", "-m", "midifier", "api"]

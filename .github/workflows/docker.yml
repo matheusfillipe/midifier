@@ -18,17 +18,28 @@ env:
 
 jobs:
   build:
-    # amd64 only. The transcription stack is x86 wheels and an arm64 leg would be
-    # emulated, slow, and unused by any target this deploys to.
+    # amd64 only. The transcription stack is x86 ROCm wheels, and an arm64 leg would be
+    # emulated, slow, and unused by anything this deploys to.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+
+      # The ROCm image lands around 6-7GB and a hosted runner starts with roughly 14GB
+      # free, which build layers plus cache would exhaust. Dropping toolchains this build
+      # never uses buys back well over 20GB.
+      - name: Make room for the ROCm layers
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          df -h /
+
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - uses: docker/metadata-action@v6
         id: meta
         with:
@@ -37,12 +48,19 @@ jobs:
             type=sha,format=short
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}
+
       - uses: docker/build-push-action@v7
         with:
           context: .
+          file: Dockerfile.gpu
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Cache to the registry rather than GHA: the ROCm layers alone exceed the
+          # 10GB GitHub Actions cache quota and would evict everything else.
+          cache-from: type=registry,ref=${{ env.image }}:buildcache
+          cache-to: type=registry,ref=${{ env.image }}:buildcache,mode=max
+
+      - name: Report what was published
+        run: docker buildx imagetools inspect ${{ env.image }}:${{ steps.meta.outputs.version }}

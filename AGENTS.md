@@ -59,7 +59,6 @@ src/midifier/
     cleanup.py     repairs the decoder's characteristic defects
     detect.py      finds instruments the model invented
 tests/             mirrors src; e2e/ needs the model and is opt-in
-claudedocs/        research and the decision record, git-excluded
 ```
 
 ## Documentation

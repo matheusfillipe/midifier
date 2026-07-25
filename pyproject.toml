@@ -45,8 +45,6 @@ packages = ["src/midifier"]
 line-length = 120
 target-version = "py312"
 src = ["src", "tests"]
-# scripts/ holds throwaway spike prototypes kept for reference, not shipped code.
-extend-exclude = ["scripts"]
 
 [tool.ruff.lint]
 select = [
