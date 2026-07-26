@@ -33,10 +33,15 @@ ENV VIRTUAL_ENV=/opt/venv \
 
 RUN uv venv $VIRTUAL_ENV
 
-# gfx110X only. Not the multi-arch index, which is what makes these images enormous.
+# gfx110X only, and pinned. Not the multi-arch index, which is what makes these images
+# enormous. The pin matters more than the size: this is a nightly channel, and the build
+# a week later than this one hangs the GPU mid-transcription hard enough to trigger a
+# driver reset, while small kernels still pass. Move it only with a full transcription
+# run to prove it.
+ARG ROCM_TORCH=2.11.0+rocm7.13.0a20260416
 RUN uv pip install --index-url https://rocm.nightlies.amd.com/v2/gfx110X-all/ \
-        torch \
-        torchaudio
+        "torch==${ROCM_TORCH}" \
+        "torchaudio==${ROCM_TORCH}"
 
 # muscriptor pulls its own torch, which would replace the ROCm build with a CPU one, so
 # its dependencies are installed explicitly instead.
