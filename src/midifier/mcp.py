@@ -7,6 +7,7 @@ tool added here appears to the bot after a restart with no client change.
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from typing import Annotated
 
 from fastmcp import FastMCP
@@ -19,7 +20,12 @@ from midifier.jobs import JobState
 from midifier.state import queue
 from midifier.state import store
 
-KEY_FIELD = Field(description="API key for this midifier instance.")
+KEY_FIELD = Field(description="API key. Not needed when the request already carried it as a header.")
+
+# Set when the transport authenticated the caller, which is the case for every HTTP
+# client. Tools then need no key of their own; a stdio client, which has no headers to
+# present, still supplies one as an argument.
+authenticated: ContextVar[bool] = ContextVar("authenticated", default=False)
 
 
 class NotAuthorizedError(RuntimeError):
@@ -41,7 +47,8 @@ def create_mcp(settings: Settings | None = None) -> FastMCP:
     mcp: FastMCP = FastMCP(name="midifier", instructions=INSTRUCTIONS)
 
     def _check(api_key: str | None) -> None:
-        # MCP has no headers, so the key travels as a tool argument.
+        if authenticated.get():
+            return
         if not verify(api_key, resolved.api_key_hash):
             raise NotAuthorizedError("invalid or missing api_key")
 

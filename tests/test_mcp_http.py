@@ -69,3 +69,43 @@ class TestHandshake:
         body = response.text
         assert "midifier" in body
         assert "instructions" in body
+
+
+class TestToolCalls:
+    """A header-authenticated caller should not have to repeat the key per tool."""
+
+    def _call(self, client: TestClient, headers: dict[str, str]) -> str:
+        # The server is stateful, so the session id from the handshake has to travel
+        # with every later call; without it the request is refused before the tool runs.
+        opened = client.post("/mcp/", json=INITIALIZE, headers={"Accept": ACCEPT, **headers})
+        session = opened.headers.get("mcp-session-id")
+        if session:
+            headers = {**headers, "mcp-session-id": session}
+        client.post(
+            "/mcp/",
+            json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+            headers={"Accept": ACCEPT, **headers},
+        )
+        response = client.post(
+            "/mcp/",
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "transcription_settings", "arguments": {}},
+            },
+            headers={"Accept": ACCEPT, **headers},
+        )
+        return str(response.text)
+
+    def test_header_auth_satisfies_the_tool(self) -> None:
+        with _client() as client:
+            body = self._call(client, {"X-API-Key": KEY})
+        assert "invalid or missing api_key" not in body
+        assert "model_size" in body
+
+    def test_bearer_auth_satisfies_the_tool(self) -> None:
+        with _client() as client:
+            body = self._call(client, {"Authorization": f"Bearer {KEY}"})
+        assert "invalid or missing api_key" not in body
+        assert "model_size" in body

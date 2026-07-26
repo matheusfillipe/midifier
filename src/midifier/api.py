@@ -26,6 +26,7 @@ from midifier.config import get_settings
 from midifier.fetch import UnsafeUrlError
 from midifier.jobs import Job
 from midifier.jobs import JobState
+from midifier.mcp import authenticated
 from midifier.mcp import create_mcp
 from midifier.state import queue
 from midifier.state import store
@@ -203,6 +204,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if not verify(presented, resolved.api_key_hash):
                     await Response("invalid or missing API key", status_code=401)(scope, receive, send)
                     return
+                # The transport has authenticated, so tools need no key of their own.
+                authenticated.set(True)
             await self._inner(scope, receive, send)
 
     app.mount("/mcp", McpAuth(mcp_app))
