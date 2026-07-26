@@ -18,12 +18,18 @@ RUN apt-get update && \
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+# PYTORCH_HIP_ALLOC_CONF: the gfx1103 APU does not support the virtual-memory
+# reservation APIs torch's allocator uses by default, and with them enabled every
+# allocation fails as out-of-memory while reporting the whole GTT pool free.
+#
+# HF_HOME / XDG_CACHE_HOME: the service user is a system account with no home, so
+# anything defaulting to $HOME/.cache fails outright. The weights are large and gated,
+# so they belong on a mounted volume rather than in the image.
 ENV VIRTUAL_ENV=/opt/venv \
     PATH=/opt/venv/bin:$PATH \
-    # The gfx1103 APU does not support the virtual-memory reservation APIs this uses, and
-    # with it enabled every allocation fails as out-of-memory while reporting the whole
-    # GTT pool free. This single variable is the difference between the GPU working and not.
-    PYTORCH_HIP_ALLOC_CONF=expandable_segments:False
+    PYTORCH_HIP_ALLOC_CONF=expandable_segments:False \
+    HF_HOME=/models/huggingface \
+    XDG_CACHE_HOME=/models/cache
 
 RUN uv venv $VIRTUAL_ENV
 
@@ -53,7 +59,9 @@ COPY . .
 # build installed above is left alone. Only muscriptor needed --no-deps.
 RUN uv pip install -e .
 
-RUN adduser --system app && chown -R app /app /opt/venv
+RUN adduser --system --uid 1000 app && \
+    mkdir -p /models && \
+    chown -R app /app /opt/venv /models
 USER app
 
 EXPOSE 8000
