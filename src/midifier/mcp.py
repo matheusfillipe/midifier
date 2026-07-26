@@ -12,12 +12,12 @@ from typing import Annotated
 from fastmcp import FastMCP
 from pydantic import Field
 
-from midifier.api import queue
-from midifier.api import store
 from midifier.auth import verify
 from midifier.config import Settings
 from midifier.config import get_settings
 from midifier.jobs import JobState
+from midifier.state import queue
+from midifier.state import store
 
 KEY_FIELD = Field(description="API key for this midifier instance.")
 

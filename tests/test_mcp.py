@@ -7,9 +7,9 @@ from typing import Any
 
 import pytest
 
-from midifier.api import store
 from midifier.config import Settings
 from midifier.mcp import create_mcp
+from midifier.state import store
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

@@ -43,9 +43,19 @@ let anyone call it. Generate a pair:
 uv run python -m midifier keygen
 ```
 
-Deploy the hash as `MIDIFIER_API_KEY_HASH`, and give the key to callers. REST callers send
-it as an `X-API-Key` header; MCP clients pass it as the `api_key` argument, since MCP has
-no headers. With no hash configured the service is open, which suits local use.
+Deploy the hash as `MIDIFIER_API_KEY_HASH`, and give the key to callers. With no hash
+configured the service is open, which suits local use.
+
+Callers present the key one of three ways, whichever their client makes easiest:
+
+| caller | how |
+|---|---|
+| REST | `X-API-Key: <key>` |
+| MCP over HTTP | `X-API-Key: <key>` or `Authorization: Bearer <key>` |
+| MCP over stdio | the `api_key` tool argument |
+
+The MCP server is served from the same app at `/mcp`, so one URL and one key cover both
+surfaces, and a job started over MCP is visible over REST.
 
 ## Configure it
 

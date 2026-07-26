@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from typing import Annotated
 from typing import Literal
 
@@ -25,16 +26,26 @@ from midifier.config import get_settings
 from midifier.fetch import UnsafeUrlError
 from midifier.jobs import Job
 from midifier.jobs import JobState
-from midifier.jobs import JobStore
-from midifier.queue import JobQueue
+from midifier.mcp import create_mcp
+from midifier.state import queue
+from midifier.state import store
 from midifier.storage import StorageError
 from midifier.storage import build_storage
 from midifier.worker import run_job
 
+if TYPE_CHECKING:
+    from starlette.types import ASGIApp
+    from starlette.types import Receive
+    from starlette.types import Scope
+    from starlette.types import Send
+
 MIDI_MEDIA_TYPE = "audio/midi"
 
-store = JobStore()
-queue = JobQueue(seconds_per_audio_second=get_settings().seconds_per_audio_second)
+# MCP has no notion of headers of its own, but clients reaching it over HTTP do send
+# them, and an agent framework configured with a bearer token or an api-key header is far
+# easier to wire than one that must thread a key through every tool call. Both are
+# accepted, and the tool argument still works for stdio clients.
+BEARER_PREFIX = "Bearer "
 
 
 class JobAccepted(BaseModel):
@@ -66,7 +77,12 @@ def require_api_key(
 def create_app(settings: Settings | None = None) -> FastAPI:
     resolved = settings or get_settings()
 
+    # The MCP app manages a task group in its lifespan, so the parent app has to run it;
+    # mounting alone leaves it uninitialised and every call fails at request time.
+    mcp_app = create_mcp(resolved).http_app(path="/")
+
     app = FastAPI(
+        lifespan=mcp_app.lifespan,
         title="midifier",
         version=__version__,
         summary="Turn a song into a multi-track General MIDI file.",
@@ -169,6 +185,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except StorageError as error:
             raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
         return Response(content=payload, media_type=MIDI_MEDIA_TYPE)
+
+    # The MCP surface is served from the same app, so one URL and one key cover both.
+    class McpAuth:
+        """Checks the key on the way in, so MCP callers authenticate like REST ones."""
+
+        def __init__(self, inner: ASGIApp) -> None:
+            self._inner = inner
+
+        async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+            if scope["type"] == "http":
+                headers = {key.decode().lower(): value.decode() for key, value in scope["headers"]}
+                presented = headers.get("x-api-key")
+                authorization = headers.get("authorization", "")
+                if not presented and authorization.startswith(BEARER_PREFIX):
+                    presented = authorization[len(BEARER_PREFIX) :]
+                if not verify(presented, resolved.api_key_hash):
+                    await Response("invalid or missing API key", status_code=401)(scope, receive, send)
+                    return
+            await self._inner(scope, receive, send)
+
+    app.mount("/mcp", McpAuth(mcp_app))
 
     @app.exception_handler(UnsafeUrlError)
     def _unsafe_url(_: object, error: UnsafeUrlError) -> Response:

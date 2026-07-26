@@ -9,8 +9,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from midifier.api import create_app
-from midifier.api import store
 from midifier.config import Settings
+from midifier.state import store
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
