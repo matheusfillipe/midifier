@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 from typing import Literal
 
+from fastapi import BackgroundTasks
 from fastapi import Depends
 from fastapi import FastAPI
 from fastapi import File
@@ -26,6 +27,7 @@ from midifier.jobs import JobState
 from midifier.jobs import JobStore
 from midifier.storage import StorageError
 from midifier.storage import build_storage
+from midifier.worker import run_job
 
 MIDI_MEDIA_TYPE = "audio/midi"
 
@@ -90,6 +92,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         tags=["jobs"],
     )
     async def create_job(
+        background: BackgroundTasks,
         file: Annotated[UploadFile | None, File(description="Audio file to transcribe.")] = None,
         url: Annotated[str | None, Form(description="Audio URL to transcribe.")] = None,
     ) -> JobAccepted:
@@ -100,6 +103,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if url is not None and not resolved.allow_url_input:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "url input is disabled")
 
+        payload: bytes | None = None
         if file is not None:
             payload = await file.read()
             if len(payload) > resolved.max_upload_bytes:
@@ -112,8 +116,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             source = url or ""
 
         job = store.create(source=source)
-        # The worker is wired in a follow-up; the contract and lifecycle are what this
-        # endpoint pins down.
+        # Transcription takes minutes, so the response returns now and the work continues
+        # after it. Losing the pod loses the job, which is why one Kubernetes Job per
+        # request is the deployment shape rather than a long-lived queue in here.
+        background.add_task(run_job, job.id, store, resolved, payload, url)
         return JobAccepted(id=job.id, state=job.state)
 
     @app.get(

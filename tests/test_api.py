@@ -36,13 +36,13 @@ class TestCreateJob:
     def test_rejects_neither(self, client: TestClient) -> None:
         assert client.post("/v1/jobs").status_code == 400
 
-    def test_rejects_an_oversized_upload(self, tmp_path_factory: object) -> None:
+    def test_rejects_an_oversized_upload(self, _no_transcription: None) -> None:
         settings = Settings(storage_backend="local", max_upload_bytes=10)
         with TestClient(create_app(settings)) as client:
             response = client.post("/v1/jobs", files={"file": ("song.mp3", b"x" * 100, "audio/mpeg")})
         assert response.status_code == 413
 
-    def test_url_input_can_be_disabled(self) -> None:
+    def test_url_input_can_be_disabled(self, _no_transcription: None) -> None:
         settings = Settings(storage_backend="local", allow_url_input=False)
         with TestClient(create_app(settings)) as client:
             response = client.post("/v1/jobs", data={"url": "https://example.com/a.mp3"})
@@ -69,12 +69,12 @@ class TestJobLifecycle:
 
 
 class TestApiKey:
-    def test_requests_are_rejected_without_the_key(self) -> None:
+    def test_requests_are_rejected_without_the_key(self, _no_transcription: None) -> None:
         settings = Settings(storage_backend="local", api_key="secret")
         with TestClient(create_app(settings)) as client:
             assert client.post("/v1/jobs", data={"url": "https://example.com/a.mp3"}).status_code == 401
 
-    def test_the_key_unlocks_the_endpoint(self) -> None:
+    def test_the_key_unlocks_the_endpoint(self, _no_transcription: None) -> None:
         settings = Settings(storage_backend="local", api_key="secret")
         with TestClient(create_app(settings)) as client:
             response = client.post(

@@ -23,7 +23,14 @@ def settings(tmp_path: Path) -> Settings:
 
 
 @pytest.fixture
-def client(settings: Settings) -> Iterator[TestClient]:
+def _no_transcription(monkeypatch: pytest.MonkeyPatch) -> None:
+    """TestClient runs background tasks inline, so without this the API tests would try
+    to transcribe. What they cover is the HTTP contract; the worker has its own tests."""
+    monkeypatch.setattr("midifier.api.run_job", lambda *args, **kwargs: None)
+
+
+@pytest.fixture
+def client(settings: Settings, _no_transcription: None) -> Iterator[TestClient]:
     with TestClient(create_app(settings)) as test_client:
         yield test_client
     store._jobs.clear()
