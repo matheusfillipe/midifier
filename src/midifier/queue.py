@@ -26,6 +26,11 @@ logger = logging.getLogger(__name__)
 # in the machine, long enough not to swing on one unusual song.
 RATE_WINDOW = 10
 
+# Assumed length of a song whose duration is not yet known, so a caller still gets a
+# usable estimate. Most audio arrives as a URL and is not measured until it is fetched,
+# and "no idea" is less useful to a waiting client than "roughly a typical song".
+NOMINAL_AUDIO_SECONDS = 210.0
+
 
 @dataclass(frozen=True)
 class Position:
@@ -84,7 +89,7 @@ class JobQueue:
             # Unknown-length jobs still have to be waited for, so they count at the
             # median of what is known rather than as free.
             known = [self._durations[j] for j in queued[: upto + 1] if j in self._durations]
-            fallback = sum(known) / len(known) if known else 0.0
+            fallback = sum(known) / len(known) if known else NOMINAL_AUDIO_SECONDS
             pending = sum(self._durations.get(j, fallback) for j in queued[: upto + 1])
 
         eta = pending * rate if pending > 0 else None

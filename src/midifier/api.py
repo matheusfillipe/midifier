@@ -29,10 +29,10 @@ from midifier.jobs import JobState
 from midifier.mcp import authenticated
 from midifier.mcp import create_mcp
 from midifier.state import queue
+from midifier.state import start
 from midifier.state import store
 from midifier.storage import StorageError
 from midifier.storage import build_storage
-from midifier.worker import run_job
 
 if TYPE_CHECKING:
     from starlette.types import ASGIApp
@@ -138,7 +138,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Transcription takes minutes, so the response returns now and the work continues
         # after it. Losing the pod loses the job, which is why one Kubernetes Job per
         # request is the deployment shape rather than a long-lived queue in here.
-        background.add_task(queue.run, job.id, lambda: run_job(job.id, store, resolved, payload, url, queue))
+        start(job.id, resolved, payload=payload, url=url)
         return JobAccepted(id=job.id, state=job.state)
 
     @app.get("/v1/queue", dependencies=[Depends(require_api_key)], tags=["jobs"])

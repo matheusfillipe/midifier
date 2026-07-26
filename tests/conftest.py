@@ -26,7 +26,7 @@ def settings(tmp_path: Path) -> Settings:
 def _no_transcription(monkeypatch: pytest.MonkeyPatch) -> None:
     """TestClient runs background tasks inline, so without this the API tests would try
     to transcribe. What they cover is the HTTP contract; the worker has its own tests."""
-    monkeypatch.setattr("midifier.api.run_job", lambda *args, **kwargs: None)
+    monkeypatch.setattr("midifier.api.start", lambda *args, **kwargs: None)
 
 
 @pytest.fixture

@@ -7,6 +7,7 @@ tool added here appears to the bot after a restart with no client change.
 
 from __future__ import annotations
 
+import time
 from contextvars import ContextVar
 from typing import Annotated
 
@@ -18,6 +19,7 @@ from midifier.config import Settings
 from midifier.config import get_settings
 from midifier.jobs import JobState
 from midifier.state import queue
+from midifier.state import start
 from midifier.state import store
 
 KEY_FIELD = Field(description="API key. Not needed when the request already carried it as a header.")
@@ -26,6 +28,13 @@ KEY_FIELD = Field(description="API key. Not needed when the request already carr
 # client. Tools then need no key of their own; a stdio client, which has no headers to
 # present, still supplies one as an argument.
 authenticated: ContextVar[bool] = ContextVar("authenticated", default=False)
+
+# A status call waits this long for something to change before answering. An agent has no
+# way to sleep between calls, so without this it polls as fast as it can think, which
+# wastes its context and tells it nothing new. Waiting server-side paces the loop for it.
+DEFAULT_WAIT_SECONDS = 25.0
+MAX_WAIT_SECONDS = 60.0
+POLL_INTERVAL = 1.0
 
 
 class NotAuthorizedError(RuntimeError):
@@ -65,18 +74,36 @@ def create_mcp(settings: Settings | None = None) -> FastMCP:
         _check(api_key)
         job = store.create(source=url)
         queue.submit(job.id)
+        start(job.id, resolved, url=url)
         return {"job_id": job.id, "state": str(job.state)}
 
     @mcp.tool
     def transcription_status(
         job_id: Annotated[str, Field(description="Job id returned by transcribe_audio.")],
         api_key: Annotated[str | None, KEY_FIELD] = None,
+        wait_seconds: Annotated[
+            float,
+            Field(description="Hold the call open this long waiting for progress, up to 60."),
+        ] = DEFAULT_WAIT_SECONDS,
     ) -> dict[str, object]:
-        """Check a transcription, including its place in the queue and estimated wait."""
+        """Check a transcription, including its place in the queue and estimated wait.
+
+        The call waits for something to change before answering, so calling it in a loop
+        polls at a sensible rate on its own. Just call it again when it returns.
+        """
         _check(api_key)
         job = store.get(job_id)
         if job is None:
             return {"error": f"no such job: {job_id}"}
+
+        deadline = time.monotonic() + min(max(wait_seconds, 0.0), MAX_WAIT_SECONDS)
+        seen = (job.state, job.stage)
+        while not job.done and (job.state, job.stage) == seen and time.monotonic() < deadline:
+            time.sleep(POLL_INTERVAL)
+            current = store.get(job_id)
+            if current is None:
+                break
+            job = current
         where = queue.position(job_id) if not job.done else None
         return {
             "queue_ahead": where.ahead if where else None,

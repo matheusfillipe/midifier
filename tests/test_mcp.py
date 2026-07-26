@@ -26,7 +26,9 @@ def payload_of(result: ToolResult) -> dict[str, Any]:
 
 
 @pytest.fixture
-def mcp_server() -> FastMCP:
+def mcp_server(monkeypatch: pytest.MonkeyPatch) -> FastMCP:
+    # The tool starts real work now; these tests cover the tool surface, not the pipeline.
+    monkeypatch.setattr("midifier.mcp.start", lambda *args, **kwargs: None)
     return create_mcp(Settings(storage_backend="local"))
 
 
@@ -54,11 +56,12 @@ class TestTranscribeAudio:
         started = await mcp_server.call_tool("transcribe_audio", {"url": "https://example.com/song.mp3"})
         job_id = payload_of(started)["job_id"]
 
-        status = await mcp_server.call_tool("transcription_status", {"job_id": job_id})
+        # wait_seconds=0 so the long poll returns at once rather than holding the test open
+        status = await mcp_server.call_tool("transcription_status", {"job_id": job_id, "wait_seconds": 0})
         assert payload_of(status)["state"] == "queued"
 
     async def test_unknown_job_reports_an_error(self, mcp_server: FastMCP) -> None:
-        result = await mcp_server.call_tool("transcription_status", {"job_id": "missing"})
+        result = await mcp_server.call_tool("transcription_status", {"job_id": "missing", "wait_seconds": 0})
         assert "no such job" in payload_of(result)["error"]
 
 
@@ -68,3 +71,19 @@ class TestSettingsTool:
         assert payload["model_size"] == "medium"
         assert payload["storage_backend"] == "local"
         assert "queued" in payload["states"]
+
+
+class TestWorkActuallyStarts:
+    """Regression: the MCP tool once queued a job and started nothing, so callers polled
+    a job that would never move. Both surfaces must go through the same start path."""
+
+    async def test_transcribe_audio_starts_the_work(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        started: list[str] = []
+        monkeypatch.setattr("midifier.mcp.start", lambda job_id, *a, **k: started.append(job_id))
+        server = create_mcp(Settings(storage_backend="local"))
+
+        result = await server.call_tool("transcribe_audio", {"url": "https://example.com/a.mp3"})
+        job_id = payload_of(result)["job_id"]
+
+        assert started == [job_id]
+        store._jobs.clear()

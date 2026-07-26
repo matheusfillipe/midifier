@@ -102,3 +102,16 @@ class TestLearnedRate:
         snapshot = queue.snapshot()
         assert snapshot["measured_from"] == 1
         assert snapshot["seconds_per_audio_second"] == 2.0
+
+
+class TestUnknownDuration:
+    """Audio given as a URL is not measured until it is fetched, but a caller waiting on
+    the queue still needs a number."""
+
+    def test_estimates_from_a_nominal_length(self) -> None:
+        queue = JobQueue(seconds_per_audio_second=3.0)
+        queue.submit("unmeasured")
+        where = queue.position("unmeasured")
+        assert where is not None
+        assert where.eta_seconds is not None
+        assert where.eta_seconds > 0
