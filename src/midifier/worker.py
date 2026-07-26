@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import tempfile
+import time
 from datetime import UTC
 from datetime import datetime
 from pathlib import Path
@@ -21,13 +22,22 @@ from midifier.transcribe import transcribe
 if TYPE_CHECKING:
     from midifier.config import Settings
     from midifier.jobs import JobStore
+    from midifier.queue import JobQueue
 
 logger = logging.getLogger(__name__)
 
 
-def run_job(job_id: str, store: JobStore, settings: Settings, payload: bytes | None, url: str | None) -> None:
+def run_job(
+    job_id: str,
+    store: JobStore,
+    settings: Settings,
+    payload: bytes | None,
+    url: str | None,
+    queue: JobQueue | None = None,
+) -> None:
     """Fetch, transcribe, store. Every failure ends on the job rather than in a traceback."""
-    store.update(job_id, state=JobState.RUNNING, stage=Stage.FETCHING)
+    store.update(job_id, state=JobState.RUNNING, stage=Stage.FETCHING, queue_ahead=0)
+    started = time.monotonic()
 
     try:
         with tempfile.TemporaryDirectory() as workspace:
@@ -58,6 +68,9 @@ def run_job(job_id: str, store: JobStore, settings: Settings, payload: bytes | N
             finished_at=datetime.now(UTC),
         )
         return
+
+    if queue is not None:
+        queue.observe(job_id, result.duration, time.monotonic() - started)
 
     store.update(
         job_id,

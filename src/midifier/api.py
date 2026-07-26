@@ -19,12 +19,14 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from midifier import __version__
+from midifier.auth import verify
 from midifier.config import Settings
 from midifier.config import get_settings
 from midifier.fetch import UnsafeUrlError
 from midifier.jobs import Job
 from midifier.jobs import JobState
 from midifier.jobs import JobStore
+from midifier.queue import JobQueue
 from midifier.storage import StorageError
 from midifier.storage import build_storage
 from midifier.worker import run_job
@@ -32,6 +34,7 @@ from midifier.worker import run_job
 MIDI_MEDIA_TYPE = "audio/midi"
 
 store = JobStore()
+queue = JobQueue(seconds_per_audio_second=get_settings().seconds_per_audio_second)
 
 
 class JobAccepted(BaseModel):
@@ -55,10 +58,8 @@ def require_api_key(
     settings: Annotated[Settings, Depends(get_settings)],
     x_api_key: Annotated[str | None, Header()] = None,
 ) -> None:
-    """No-op until MIDIFIER_API_KEY is set, so local runs need no credentials."""
-    if settings.api_key is None:
-        return
-    if x_api_key != settings.api_key:
+    """No-op until a key hash is configured, so local runs need no credentials."""
+    if not verify(x_api_key, settings.api_key_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid or missing X-API-Key")
 
 
@@ -116,11 +117,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             source = url or ""
 
         job = store.create(source=source)
+        queue.submit(job.id)
         # Transcription takes minutes, so the response returns now and the work continues
         # after it. Losing the pod loses the job, which is why one Kubernetes Job per
         # request is the deployment shape rather than a long-lived queue in here.
-        background.add_task(run_job, job.id, store, resolved, payload, url)
+        background.add_task(queue.run, job.id, lambda: run_job(job.id, store, resolved, payload, url, queue))
         return JobAccepted(id=job.id, state=job.state)
+
+    @app.get("/v1/queue", dependencies=[Depends(require_api_key)], tags=["jobs"])
+    def queue_status() -> dict[str, object]:
+        """How busy the service is, and how fast it is currently working."""
+        return queue.snapshot()
 
     @app.get(
         "/v1/jobs/{job_id}",
@@ -133,6 +140,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         job = store.get(job_id)
         if job is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "no such job")
+        if not job.done:
+            where = queue.position(job_id)
+            if where is not None:
+                return job.model_copy(update={"queue_ahead": where.ahead, "eta_seconds": where.eta_seconds})
         return job
 
     @app.delete(
@@ -150,7 +161,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             store.update(job_id, state=JobState.CANCELLED)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-    @app.get("/v1/files/{key:path}", tags=["files"])
+    @app.get("/v1/files/{key:path}", dependencies=[Depends(require_api_key)], tags=["files"])
     def get_file(key: str) -> Response:
         """Serve a stored MIDI. Only used by the local storage backend."""
         try:

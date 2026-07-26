@@ -12,10 +12,19 @@ from typing import Annotated
 from fastmcp import FastMCP
 from pydantic import Field
 
+from midifier.api import queue
 from midifier.api import store
+from midifier.auth import verify
 from midifier.config import Settings
 from midifier.config import get_settings
 from midifier.jobs import JobState
+
+KEY_FIELD = Field(description="API key for this midifier instance.")
+
+
+class NotAuthorizedError(RuntimeError):
+    """The supplied key does not match."""
+
 
 INSTRUCTIONS = """
 midifier turns a recording into a multi-track General MIDI file. It identifies which
@@ -31,26 +40,40 @@ def create_mcp(settings: Settings | None = None) -> FastMCP:
     resolved = settings or get_settings()
     mcp: FastMCP = FastMCP(name="midifier", instructions=INSTRUCTIONS)
 
+    def _check(api_key: str | None) -> None:
+        # MCP has no headers, so the key travels as a tool argument.
+        if not verify(api_key, resolved.api_key_hash):
+            raise NotAuthorizedError("invalid or missing api_key")
+
     @mcp.tool
     def transcribe_audio(
         url: Annotated[str, Field(description="Publicly reachable URL of the audio to transcribe.")],
+        api_key: Annotated[str | None, KEY_FIELD] = None,
     ) -> dict[str, str]:
         """Start transcribing a song into a multi-track MIDI file.
 
-        Returns a job id to poll with `transcription_status`. Expect a few minutes.
+        Returns a job id to poll with `transcription_status`. Transcription runs at
+        roughly three times the length of the song, and one job runs at a time.
         """
+        _check(api_key)
         job = store.create(source=url)
+        queue.submit(job.id)
         return {"job_id": job.id, "state": str(job.state)}
 
     @mcp.tool
     def transcription_status(
         job_id: Annotated[str, Field(description="Job id returned by transcribe_audio.")],
+        api_key: Annotated[str | None, KEY_FIELD] = None,
     ) -> dict[str, object]:
-        """Check a transcription, and get the MIDI URL and track list once it is done."""
+        """Check a transcription, including its place in the queue and estimated wait."""
+        _check(api_key)
         job = store.get(job_id)
         if job is None:
             return {"error": f"no such job: {job_id}"}
+        where = queue.position(job_id) if not job.done else None
         return {
+            "queue_ahead": where.ahead if where else None,
+            "eta_seconds": where.eta_seconds if where else None,
             "state": str(job.state),
             "stage": str(job.stage) if job.stage else None,
             "midi_url": job.midi_url,
@@ -59,9 +82,13 @@ def create_mcp(settings: Settings | None = None) -> FastMCP:
         }
 
     @mcp.tool
-    def transcription_settings() -> dict[str, object]:
-        """Report how this instance is configured, including model size and storage."""
+    def transcription_settings(
+        api_key: Annotated[str | None, KEY_FIELD] = None,
+    ) -> dict[str, object]:
+        """Report how this instance is configured, and how busy it currently is."""
+        _check(api_key)
         return {
+            "queue": queue.snapshot(),
             "model_size": resolved.model_size,
             "two_pass": resolved.two_pass,
             "storage_backend": resolved.storage_backend,

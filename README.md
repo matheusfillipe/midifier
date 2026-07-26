@@ -27,8 +27,25 @@ curl -F 'file=@song.mp3' http://localhost:8000/v1/jobs
 curl http://localhost:8000/v1/jobs/<id>
 ```
 
-Transcription takes roughly twice the length of the song, so jobs are polled rather than waited
-on. The OpenAPI schema is at `/openapi.json`.
+One job runs at a time, and each takes roughly three times the length of the song, so jobs are
+polled rather than waited on. While a job waits, `GET /v1/jobs/<id>` reports `queue_ahead` and
+`eta_seconds`, and `GET /v1/queue` reports how busy the service is. The estimate is measured from
+completed jobs rather than configured, so it reflects whatever hardware this runs on.
+
+The OpenAPI schema is at `/openapi.json`.
+
+## Secure it
+
+The service holds only the *hash* of an API key, so reading the deployed secret does not
+let anyone call it. Generate a pair:
+
+```bash
+uv run python -m midifier keygen
+```
+
+Deploy the hash as `MIDIFIER_API_KEY_HASH`, and give the key to callers. REST callers send
+it as an `X-API-Key` header; MCP clients pass it as the `api_key` argument, since MCP has
+no headers. With no hash configured the service is open, which suits local use.
 
 ## Configure it
 
@@ -37,11 +54,13 @@ Every setting is an environment variable prefixed `MIDIFIER_`. See
 
 | variable | default | |
 |---|---|---|
-| `MIDIFIER_API_KEY` | unset | when set, callers must send `X-API-Key` |
+| `MIDIFIER_API_KEY_HASH` | unset | when set, callers must present the key |
 | `MIDIFIER_STORAGE_BACKEND` | `local` | `local` or `s3` |
 | `MIDIFIER_MINIO_BUCKET` | — | with the other `MINIO_*` values, for `s3` |
 | `MIDIFIER_MODEL_SIZE` | `medium` | `small`, `medium` or `large` |
 | `MIDIFIER_HF_TOKEN` | — | needed to download the transcription weights |
+| `MIDIFIER_MAX_DURATION_SECONDS` | `360` | longest song accepted |
+| `MIDIFIER_MAX_CONCURRENT_JOBS` | `1` | transcriptions run at a time |
 
 ## Develop it
 

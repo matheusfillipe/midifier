@@ -20,7 +20,12 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     log_level: str = "info"
-    api_key: str | None = Field(default=None, description="When set, callers must send it as X-API-Key.")
+    # The hash of the key, never the key itself, so the deployed secret cannot be used to
+    # call the service. Generate both with `python -m midifier keygen`.
+    api_key_hash: str | None = Field(
+        default=None,
+        description="SHA-256 of the API key. When set, callers must present the key itself.",
+    )
 
     # --- storage ---
     # Results land in object storage when configured, otherwise on disk. Local is the
@@ -38,6 +43,17 @@ class Settings(BaseSettings):
     minio_use_ssl: bool = True
     minio_region: str = "us-east-1"
 
+    # --- queue ---
+    # One transcription at a time. A second concurrent decode competes for whatever
+    # accelerator is present, and on shared or memory-constrained hardware that is how a
+    # working setup turns into a failing one.
+    max_concurrent_jobs: int = 1
+
+    # Seconds of processing per second of audio, used for the queue's ETA before any job
+    # has finished. It is only a starting point: the real figure is measured from
+    # completed jobs, so this need not match any particular machine.
+    seconds_per_audio_second: float = 3.5
+
     # --- transcription ---
     model_size: Literal["small", "medium", "large"] = "medium"
     device: str = "auto"
@@ -49,7 +65,7 @@ class Settings(BaseSettings):
 
     # --- input limits ---
     max_upload_bytes: int = 100 * 1024 * 1024
-    max_duration_seconds: float = 900.0
+    max_duration_seconds: float = 360.0
     allow_url_input: bool = True
 
     @property

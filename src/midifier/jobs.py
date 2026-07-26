@@ -56,6 +56,10 @@ class Job(BaseModel):
     duration_seconds: float | None = None
     tempo: float | None = None
 
+    # Filled while the job waits, so a caller can see the queue rather than guess.
+    queue_ahead: int | None = None
+    eta_seconds: float | None = None
+
     midi_url: str | None = None
     tracks: list[Track] = Field(default_factory=list)
     dropped_instruments: list[str] = Field(default_factory=list)

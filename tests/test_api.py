@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from midifier.api import create_app
+from midifier.auth import hash_key
 from midifier.config import Settings
 
 
@@ -70,12 +71,12 @@ class TestJobLifecycle:
 
 class TestApiKey:
     def test_requests_are_rejected_without_the_key(self, _no_transcription: None) -> None:
-        settings = Settings(storage_backend="local", api_key="secret")
+        settings = Settings(storage_backend="local", api_key_hash=hash_key("secret"))
         with TestClient(create_app(settings)) as client:
             assert client.post("/v1/jobs", data={"url": "https://example.com/a.mp3"}).status_code == 401
 
     def test_the_key_unlocks_the_endpoint(self, _no_transcription: None) -> None:
-        settings = Settings(storage_backend="local", api_key="secret")
+        settings = Settings(storage_backend="local", api_key_hash=hash_key("secret"))
         with TestClient(create_app(settings)) as client:
             response = client.post(
                 "/v1/jobs",
@@ -85,7 +86,7 @@ class TestApiKey:
         assert response.status_code == 202
 
     def test_health_stays_open(self) -> None:
-        settings = Settings(storage_backend="local", api_key="secret")
+        settings = Settings(storage_backend="local", api_key_hash=hash_key("secret"))
         with TestClient(create_app(settings)) as client:
             assert client.get("/v1/health").status_code == 200
 

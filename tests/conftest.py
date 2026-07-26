@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
-    return Settings(storage_backend="local", local_storage_dir=tmp_path / "data", api_key=None)
+    return Settings(storage_backend="local", local_storage_dir=tmp_path / "data", api_key_hash=None)
 
 
 @pytest.fixture
