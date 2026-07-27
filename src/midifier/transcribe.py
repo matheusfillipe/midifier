@@ -17,6 +17,7 @@ down instead of the service.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -59,13 +60,26 @@ class Result:
     cleanup: cleanup.CleanupReport
 
 
-def _run(args: list[str], timeout: float) -> None:
+def _environment(settings: Settings) -> dict[str, str]:
+    """The model reads its own token from `HF_TOKEN`, under that name and no other.
+
+    The weights are gated, so without this a size whose files are not already cached fails at
+    download time rather than at startup -- the service looks healthy until the first job.
+    """
+    environment = dict(os.environ)
+    if settings.hf_token:
+        environment["HF_TOKEN"] = settings.hf_token
+    return environment
+
+
+def _run(args: list[str], timeout: float, settings: Settings) -> None:
     process = subprocess.run(
         ["python", "-m", "muscriptor", "transcribe", *args],
         capture_output=True,
         text=True,
         timeout=timeout,
         check=False,
+        env=_environment(settings),
     )
     if process.returncode != 0:
         raise TranscriptionError((process.stderr or process.stdout or "muscriptor failed")[-2000:])
@@ -96,6 +110,7 @@ def _decode(audio: Path, destination: Path, settings: Settings, timeout: float) 
     _run(
         [str(audio), "-o", str(destination), "-f", "midi", "-m", settings.model_size, "-d", settings.device],
         timeout,
+        settings,
     )
     if not destination.is_file():
         raise TranscriptionError("muscriptor reported success but wrote no file")
