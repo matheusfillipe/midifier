@@ -67,10 +67,11 @@ Every setting is an environment variable prefixed `MIDIFIER_`. See
 | `MIDIFIER_API_KEY_HASH` | unset | when set, callers must present the key |
 | `MIDIFIER_STORAGE_BACKEND` | `local` | `local` or `s3` |
 | `MIDIFIER_MINIO_BUCKET` | — | with the other `MINIO_*` values, for `s3` |
-| `MIDIFIER_MODEL_SIZE` | `medium` | `small`, `medium` or `large` |
+| `MIDIFIER_MODEL_SIZE` | `large` | `small`, `medium` or `large` |
 | `MIDIFIER_HF_TOKEN` | — | needed to download the transcription weights |
 | `MIDIFIER_MAX_DURATION_SECONDS` | `360` | longest song accepted |
 | `MIDIFIER_MAX_CONCURRENT_JOBS` | `1` | transcriptions run at a time |
+| `MIDIFIER_SEGMENT_SECONDS` | `60` | length of each decoded segment |
 
 ## Develop it
 

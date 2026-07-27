@@ -52,16 +52,17 @@ class Settings(BaseSettings):
     # Seconds of processing per second of audio, used for the queue's ETA before any job
     # has finished. It is only a starting point: the real figure is measured from
     # completed jobs, so this need not match any particular machine.
-    seconds_per_audio_second: float = 3.5
+    seconds_per_audio_second: float = 3.0
 
     # --- transcription ---
-    model_size: Literal["small", "medium", "large"] = "medium"
+    model_size: Literal["small", "medium", "large"] = "large"
     device: str = "auto"
     hf_token: str | None = None
 
-    # Two passes: the first finds which instruments are present, the second re-decodes
-    # with the hallucinated ones forbidden. See docs/pipeline.md.
-    two_pass: bool = True
+    # Audio is decoded in overlapping segments of this length. The model carries each of its
+    # own five-second chunks into the next, so mistakes travel forward; shorter segments cap
+    # that reach but give the model less context to place a part in.
+    segment_seconds: float = 60.0
 
     # --- input limits ---
     max_upload_bytes: int = 100 * 1024 * 1024

@@ -57,7 +57,8 @@ src/midifier/
   jobs.py          job model and in-memory store
   midi/
     cleanup.py     repairs the decoder's characteristic defects
-    detect.py      finds instruments the model invented
+    segments.py    decodes long audio in overlapping pieces and stitches them
+    consolidate.py folds lanes that are one part under two names
 tests/             mirrors src; e2e/ needs the model and is opt-in
 ```
 
@@ -78,8 +79,8 @@ something that no longer exists, delete it rather than softening it.
 Unit tests are pure and fast. Anything needing the transcription model or real audio is marked
 `e2e` and skipped unless `MIDIFIER_E2E=1`, because the model is multi-gigabyte and gated.
 
-Test the behaviour that was hard to get right — the cleanup thresholds, the hallucination
-detector, the SSRF guards — not the framework. A test that only proves FastAPI routes are
+Test the behaviour that was hard to get right — the cleanup thresholds, the seam repair,
+the SSRF guards — not the framework. A test that only proves FastAPI routes are
 plumbed is noise.
 
 ## Things that are settled
@@ -89,6 +90,10 @@ reintroduce these without new evidence:
 
 - No source separation. Transcribing the full mix beats separating first.
 - No quantization. Snapping to a detected beat grid sounded worse at every strength.
+- No beam search. On `large` it returns byte-identical output for 3.1x the compute.
+- No classifier-free guidance. It splits one song into more instrument classes, not fewer.
+- Cleanup never judges a repeat by note *length*. Note lengths are note values at the song's
+  tempo, so any fixed threshold is a tempo threshold and decides differently per song.
 - No synthesised velocity. Measuring loudness from a full mix produces incoherent dynamics.
 - Greedy decoding, not temperature sampling. Sampling fixes the ending and degrades the rest;
   the ending is repaired in post instead.

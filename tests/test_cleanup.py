@@ -6,6 +6,7 @@ import pretty_midi
 
 from midifier.midi.cleanup import clean
 from midifier.midi.cleanup import merge_held
+from midifier.midi.cleanup import plays_a_pulse
 from midifier.midi.cleanup import trim_loops
 from midifier.midi.cleanup import trim_overrun
 
@@ -65,11 +66,30 @@ class TestMergeHeld:
         midi = _midi([note(36, 0.0, 0.05), note(36, 0.05, 0.1)], is_drum=True)
         assert merge_held(midi) == 0
 
+    def test_a_steady_pulse_is_left_alone(self) -> None:
+        """Fusing a driving bass into one drone is heard as the part having disappeared."""
+        notes = [note(40, index * 0.2, index * 0.2 + 0.19) for index in range(40)]
+        assert merge_held(_midi(notes)) == 0
+
+
+class TestPulseDetection:
+    def test_evenly_spaced_playing_is_a_pulse(self) -> None:
+        notes = [note(40, index * 0.2, index * 0.2 + 0.19) for index in range(40)]
+        assert plays_a_pulse(_midi(notes).instruments[0])
+
+    def test_free_playing_is_not(self) -> None:
+        starts = [0.0, 0.31, 0.9, 1.05, 2.4, 2.5, 4.2, 4.9, 5.05, 7.7, 9.1, 9.15]
+        assert not plays_a_pulse(_midi([note(60, s, s + 0.1) for s in starts]).instruments[0])
+
+    def test_too_few_notes_to_tell(self) -> None:
+        notes = [note(40, index * 0.2, index * 0.2 + 0.19) for index in range(4)]
+        assert not plays_a_pulse(_midi(notes).instruments[0])
+
 
 class TestTrimLoops:
     def test_cuts_a_stuck_single_pitch(self) -> None:
         notes = [note(60, index * 0.25, index * 0.25 + 0.2) for index in range(40)]
-        assert trim_loops(_midi(notes), max_cycles=8) > 0
+        assert trim_loops(_midi(notes), duration=10.0, max_cycles=8) > 0
 
     def test_cuts_a_repeating_two_note_figure(self) -> None:
         """A same-pitch counter never fires on A-B-A-B; periodicity does."""
@@ -77,11 +97,16 @@ class TestTrimLoops:
         for index in range(60):
             pitch = 60 if index % 2 == 0 else 64
             notes.append(note(pitch, index * 0.25, index * 0.25 + 0.2))
-        assert trim_loops(_midi(notes), max_cycles=8) > 0
+        assert trim_loops(_midi(notes), duration=10.0, max_cycles=8) > 0
 
     def test_leaves_ordinary_playing_alone(self) -> None:
         notes = [note(60 + (index % 7), index * 0.25, index * 0.25 + 0.2) for index in range(30)]
-        assert trim_loops(_midi(notes), max_cycles=8) == 0
+        assert trim_loops(_midi(notes), duration=10.0, max_cycles=8) == 0
+
+    def test_a_repeated_section_mid_song_is_music(self) -> None:
+        """Only a decode running out of audio degenerates; a repetitive verse is playing."""
+        notes = [note(60, index * 0.25, index * 0.25 + 0.2) for index in range(40)]
+        assert trim_loops(_midi(notes), duration=300.0, max_cycles=8) == 0
 
 
 class TestClean:

@@ -16,6 +16,8 @@ sits well outside normal playing and only the excess is touched.
 
 from __future__ import annotations
 
+import itertools
+import statistics
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -33,6 +35,19 @@ DEFAULT_MAX_MERGED = 1.0
 # Slack past the audio for a final chord to ring out.
 END_TOLERANCE = 0.5
 
+# Only the last stretch of a decode is trimmed for repetition. The decoder degenerates as it
+# runs out of song; a figure repeated in the middle is the music doing it.
+DEFAULT_TAIL_SECONDS = 20.0
+
+# A part counts as playing a steady figure when this share of its onsets sit within
+# PULSE_TOLERANCE of its own median spacing. Note *lengths* cannot make this judgement:
+# they are note values at the song's tempo, so any fixed threshold is a tempo threshold and
+# picks a different answer on every song. Spacing regularity does not move with tempo.
+PULSE_TOLERANCE = 0.35
+PULSE_SHARE = 0.40
+MIN_ONSETS_FOR_PULSE = 10
+MAX_PULSE_GAP = 2.0
+
 
 @dataclass(frozen=True)
 class CleanupReport:
@@ -43,6 +58,26 @@ class CleanupReport:
     cut_loops: int
     notes_before: int
     notes_after: int
+    pulse_tracks: list[str]
+
+
+def plays_a_pulse(instrument: pretty_midi.Instrument) -> bool:
+    """Whether this part repeats a steady figure, so its repeats are music and not a defect.
+
+    A driving bass is indistinguishable from decoder stutter by note geometry alone -- both are
+    the same pitch, repeated, touching. What separates them is that the player keeps time.
+    """
+    ordered = sorted(instrument.notes, key=lambda note: note.start)
+    gaps = [
+        later.start - earlier.start
+        for earlier, later in itertools.pairwise(ordered)
+        if 0.0 < later.start - earlier.start < MAX_PULSE_GAP
+    ]
+    if len(gaps) < MIN_ONSETS_FOR_PULSE:
+        return False
+    spacing = statistics.median(gaps)
+    steady = sum(1 for gap in gaps if abs(gap - spacing) < PULSE_TOLERANCE * spacing)
+    return steady / len(gaps) >= PULSE_SHARE
 
 
 def trim_overrun(midi: pretty_midi.PrettyMIDI, duration: float) -> int:
@@ -70,11 +105,12 @@ def merge_held(
     result keeps a merged note the length of something a player would hold.
 
     Percussion is skipped, where repeated hits are the point and note length is ignored
-    downstream anyway.
+    downstream anyway, and so is any part keeping a steady pulse -- fusing those turns a
+    driving bass into a drone, which reads as the part having gone missing.
     """
     removed = 0
     for instrument in midi.instruments:
-        if instrument.is_drum:
+        if instrument.is_drum or plays_a_pulse(instrument):
             continue
 
         by_pitch: dict[int, list[pretty_midi.Note]] = {}
@@ -99,13 +135,23 @@ def merge_held(
     return removed
 
 
-def trim_loops(midi: pretty_midi.PrettyMIDI, max_cycles: int = DEFAULT_MAX_CYCLES) -> int:
-    """Cut figures that repeat past `max_cycles`.
+def trim_loops(
+    midi: pretty_midi.PrettyMIDI,
+    duration: float,
+    max_cycles: int = DEFAULT_MAX_CYCLES,
+    tail: float = DEFAULT_TAIL_SECONDS,
+) -> int:
+    """Cut figures that repeat past `max_cycles`, in the closing stretch only.
 
     Counting one pitch repeated in a row misses the usual case, where the decoder loops on
     a short figure (A B A B ...) and resets a same-pitch counter on every note. Testing
     periodicity instead catches both, a stuck single pitch being the period-one case.
+
+    The window matters as much as the test. Applied to a whole song this deletes real
+    playing: a repetitive section reads as periodic because it is. Degeneration happens as
+    the decode runs out of audio, so only the closing seconds are eligible.
     """
+    cutoff = duration - tail
     removed = 0
     for instrument in midi.instruments:
         ordered = sorted(instrument.notes, key=lambda note: note.start)
@@ -119,7 +165,7 @@ def trim_loops(midi: pretty_midi.PrettyMIDI, max_cycles: int = DEFAULT_MAX_CYCLE
                     run += 1
                 else:
                     run = 0
-                if run > period * max_cycles:
+                if run > period * max_cycles and ordered[index].start >= cutoff:
                     doomed.add(index)
 
         instrument.notes = [note for index, note in enumerate(ordered) if index not in doomed]
@@ -138,8 +184,10 @@ def clean(
     """Run every repair, in the order they depend on each other."""
     before = sum(len(instrument.notes) for instrument in midi.instruments)
     trimmed = trim_overrun(midi, duration)
+    # Recorded before merging, since merging is what would flatten the evidence.
+    pulses = [i.name for i in midi.instruments if i.notes and not i.is_drum and plays_a_pulse(i)]
     merged = merge_held(midi, merge_gap, max_merged)
-    loops = trim_loops(midi, max_cycles)
+    loops = trim_loops(midi, duration, max_cycles)
     after = sum(len(instrument.notes) for instrument in midi.instruments)
     return CleanupReport(
         trimmed_past_end=trimmed,
@@ -147,4 +195,5 @@ def clean(
         cut_loops=loops,
         notes_before=before,
         notes_after=after,
+        pulse_tracks=pulses,
     )

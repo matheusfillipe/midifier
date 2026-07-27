@@ -124,7 +124,7 @@ def create_mcp(settings: Settings | None = None) -> FastMCP:
         return {
             "queue": queue.snapshot(),
             "model_size": resolved.model_size,
-            "two_pass": resolved.two_pass,
+            "segment_seconds": resolved.segment_seconds,
             "storage_backend": resolved.storage_backend,
             "max_duration_seconds": resolved.max_duration_seconds,
             "states": [str(state) for state in JobState],

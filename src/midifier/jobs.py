@@ -28,7 +28,6 @@ class Stage(StrEnum):
     """Pipeline stages, in order. Reported so a caller can show real progress."""
 
     FETCHING = "fetching"
-    DETECTING = "detecting"
     TRANSCRIBING = "transcribing"
     CLEANING = "cleaning"
     STORING = "storing"

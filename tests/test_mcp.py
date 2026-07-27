@@ -68,7 +68,7 @@ class TestTranscribeAudio:
 class TestSettingsTool:
     async def test_reports_how_the_instance_is_configured(self, mcp_server: FastMCP) -> None:
         payload = payload_of(await mcp_server.call_tool("transcription_settings", {}))
-        assert payload["model_size"] == "medium"
+        assert payload["model_size"] == "large"
         assert payload["storage_backend"] == "local"
         assert "queued" in payload["states"]
 

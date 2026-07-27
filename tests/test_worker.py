@@ -1,7 +1,7 @@
 """The worker, with the model mocked at its boundary.
 
 Everything below the `transcribe` call is a multi-gigabyte gated model and a GPU, so the
-seam is exactly there: the pipeline's own logic is tested in test_cleanup and test_detect,
+seam is exactly there: the pipeline's own logic is tested in test_cleanup, test_consolidate and test_segments,
 and what matters here is that a job ends in the right state with the right fields.
 """
 
@@ -36,8 +36,8 @@ def _result(duration: float = 30.0) -> Result:
             Track(name="electric bass", program=33, is_drum=False, note_count=100),
             Track(name="drums", program=0, is_drum=True, note_count=200),
         ],
-        dropped=[("acoustic_guitar", "notes too short")],
-        cleanup=CleanupReport(1, 2, 3, 310, 300),
+        dropped=[("synth_lead", "distorted_electric_guitar")],
+        cleanup=CleanupReport(1, 2, 3, 310, 300, []),
     )
 
 
@@ -59,7 +59,7 @@ class TestSuccess:
         assert done.state is JobState.SUCCEEDED
         assert done.midi_url == f"/v1/files/{job.id}.mid"
         assert [track.name for track in done.tracks] == ["electric bass", "drums"]
-        assert done.dropped_instruments == ["acoustic_guitar"]
+        assert done.dropped_instruments == ["synth_lead"]
         assert done.finished_at is not None
 
     def test_stores_the_midi_where_the_url_points(self, settings: Settings, monkeypatch: MonkeyPatch) -> None:
