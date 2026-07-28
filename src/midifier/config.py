@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     # that reach but give the model less context to place a part in.
     segment_seconds: float = 60.0
 
+    # How long an MCP status call holds open waiting for progress. Every call that returns
+    # costs an agent one model round-trip, so a longer hold is what makes polling cheap for
+    # the caller. The ceiling is whatever the client and any proxy in front of it tolerate.
+    status_hold_seconds: float = 55.0
+
     # --- input limits ---
     max_upload_bytes: int = 100 * 1024 * 1024
     max_duration_seconds: float = 360.0

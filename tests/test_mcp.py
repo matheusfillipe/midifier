@@ -87,3 +87,26 @@ class TestWorkActuallyStarts:
 
         assert started == [job_id]
         store._jobs.clear()
+
+
+class TestStatusHold:
+    """Every call that returns costs the caller a model round-trip, so the hold is the knob
+    that decides how expensive polling is for an agent."""
+
+    async def test_holds_for_the_configured_time_by_default(self, mcp_server: FastMCP) -> None:
+        from midifier.config import Settings
+
+        assert Settings().status_hold_seconds > 30.0
+
+    async def test_a_caller_can_ask_for_a_shorter_hold(self, mcp_server: FastMCP) -> None:
+        import time
+
+        from midifier.state import store
+
+        job = store.create(source="song.mp3")
+        started = time.monotonic()
+        payload = payload_of(
+            await mcp_server.call_tool("transcription_status", {"job_id": job.id, "wait_seconds": 1.0})
+        )
+        assert time.monotonic() - started < 10.0
+        assert payload["state"] == "queued"

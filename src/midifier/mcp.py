@@ -32,8 +32,7 @@ authenticated: ContextVar[bool] = ContextVar("authenticated", default=False)
 # A status call waits this long for something to change before answering. An agent has no
 # way to sleep between calls, so without this it polls as fast as it can think, which
 # wastes its context and tells it nothing new. Waiting server-side paces the loop for it.
-DEFAULT_WAIT_SECONDS = 25.0
-MAX_WAIT_SECONDS = 60.0
+MAX_WAIT_SECONDS = 240.0
 POLL_INTERVAL = 1.0
 
 
@@ -82,9 +81,9 @@ def create_mcp(settings: Settings | None = None) -> FastMCP:
         job_id: Annotated[str, Field(description="Job id returned by transcribe_audio.")],
         api_key: Annotated[str | None, KEY_FIELD] = None,
         wait_seconds: Annotated[
-            float,
-            Field(description="Hold the call open this long waiting for progress, up to 60."),
-        ] = DEFAULT_WAIT_SECONDS,
+            float | None,
+            Field(description="Hold the call open this long waiting for progress. Zero answers at once."),
+        ] = None,
     ) -> dict[str, object]:
         """Check a transcription, including its place in the queue and estimated wait.
 
@@ -96,7 +95,8 @@ def create_mcp(settings: Settings | None = None) -> FastMCP:
         if job is None:
             return {"error": f"no such job: {job_id}"}
 
-        deadline = time.monotonic() + min(max(wait_seconds, 0.0), MAX_WAIT_SECONDS)
+        hold = resolved.status_hold_seconds if wait_seconds is None else max(wait_seconds, 0.0)
+        deadline = time.monotonic() + min(hold, MAX_WAIT_SECONDS)
         seen = (job.state, job.stage)
         while not job.done and (job.state, job.stage) == seen and time.monotonic() < deadline:
             time.sleep(POLL_INTERVAL)
