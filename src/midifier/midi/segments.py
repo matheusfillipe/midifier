@@ -2,8 +2,8 @@
 
 Long decodes drift. The model works in five-second chunks and carries each chunk's opening
 from the previous one, so a part it loses stays lost and an invented ending runs to the last
-chunk. Decoding in segments caps how far either can travel, and costs less than one pass over
-the whole file because the closing segment stops instead of filling its budget with noise.
+chunk. Decoding in segments caps how far either can travel, and the closing segment stops on
+its own rather than filling its budget with noise.
 
 The price is the joins. A segment decoded alone has no reason to name a part the way its
 neighbour did, so without repair the entire band appears to change instrument at every seam.

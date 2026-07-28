@@ -4,8 +4,8 @@ The audio is decoded in overlapping segments rather than in one pass. The model 
 five-second chunks and teacher-forces each chunk's opening from the previous one, which keeps
 instruments stable but also carries its mistakes forward: a part it stops hearing stays gone
 for the rest of the song, and an ending it starts inventing runs to the last chunk. Segmenting
-caps how far either travels, and measured cheaper than one pass over the whole file, because a
-closing segment stops on its own instead of spending its budget on noise.
+caps how far either travels. A closing segment also stops on its own rather than spending its
+budget inventing an ending, so the extra audio a segmented run decodes largely pays for itself.
 
 What segmenting costs is lane identity, since a segment decoded alone has no reason to name a
 part the way its neighbour did. That is repaired afterwards, from the overlap.

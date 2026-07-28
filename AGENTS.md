@@ -90,7 +90,7 @@ reintroduce these without new evidence:
 
 - No source separation. Transcribing the full mix beats separating first.
 - No quantization. Snapping to a detected beat grid sounded worse at every strength.
-- No beam search. On `large` it returns byte-identical output for 3.1x the compute.
+- No beam search. On `large` it returns byte-identical output for a multiple of the compute.
 - No classifier-free guidance. It splits one song into more instrument classes, not fewer.
 - Cleanup never judges a repeat by note *length*. Note lengths are note values at the song's
   tempo, so any fixed threshold is a tempo threshold and decides differently per song.
