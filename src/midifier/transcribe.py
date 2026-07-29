@@ -17,9 +17,11 @@ down instead of the service.
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -37,6 +39,14 @@ if TYPE_CHECKING:
 # length and one that has gone far past that will not recover.
 TIMEOUT_MULTIPLIER = 20.0
 MIN_TIMEOUT_SECONDS = 300.0
+
+# Failures worth another attempt: the device fell over, rather than the audio being wrong.
+TRANSIENT_MARKERS = ("GPU Hang", "HW Exception", "HIPFFT", "CUDA error", "out of memory", "Aborted")
+
+# Long enough for a driver to settle after a reset before the next process asks for the device.
+RETRY_PAUSE_SECONDS = 5.0
+
+logger = logging.getLogger(__name__)
 
 
 class TranscriptionError(RuntimeError):
@@ -107,14 +117,39 @@ def _cut(source: Path, start: float, length: float, destination: Path) -> None:
 
 
 def _decode(audio: Path, destination: Path, settings: Settings, timeout: float) -> pretty_midi.PrettyMIDI:
-    _run(
-        [str(audio), "-o", str(destination), "-f", "midi", "-m", settings.model_size, "-d", settings.device],
-        timeout,
-        settings,
-    )
-    if not destination.is_file():
-        raise TranscriptionError("muscriptor reported success but wrote no file")
-    return pretty_midi.PrettyMIDI(str(destination))
+    """Decode one piece of audio, retrying a decode that died on the accelerator.
+
+    Some accelerators lack kernels for particular matrix shapes and hang rather than erroring,
+    which kills the subprocess. It is not the audio: the same segment usually decodes on the
+    next attempt, in a fresh process with a fresh device context. Retrying here turns an
+    intermittent hardware fault into a slower success instead of a failed job.
+    """
+    attempts = settings.decode_attempts
+    for attempt in range(1, attempts + 1):
+        try:
+            _run(
+                [str(audio), "-o", str(destination), "-f", "midi", "-m", settings.model_size, "-d", settings.device],
+                timeout,
+                settings,
+            )
+        except TranscriptionError as error:
+            if attempt == attempts or not _is_transient(str(error)):
+                raise
+            logger.warning("decode of %s failed (attempt %d/%d), retrying: %s", audio.name, attempt, attempts, error)
+            destination.unlink(missing_ok=True)
+            time.sleep(RETRY_PAUSE_SECONDS)
+            continue
+
+        if not destination.is_file():
+            raise TranscriptionError("muscriptor reported success but wrote no file")
+        return pretty_midi.PrettyMIDI(str(destination))
+
+    raise TranscriptionError("decode did not produce a file")
+
+
+def _is_transient(message: str) -> bool:
+    """Whether a failure is the accelerator misbehaving rather than the input being wrong."""
+    return any(marker in message for marker in TRANSIENT_MARKERS)
 
 
 def transcribe(audio: Path, settings: Settings) -> Result:

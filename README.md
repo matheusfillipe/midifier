@@ -72,6 +72,7 @@ Every setting is an environment variable prefixed `MIDIFIER_`. See
 | `MIDIFIER_MAX_DURATION_SECONDS` | `360` | longest song accepted |
 | `MIDIFIER_MAX_CONCURRENT_JOBS` | `1` | transcriptions run at a time |
 | `MIDIFIER_SEGMENT_SECONDS` | `60` | length of each decoded segment |
+| `MIDIFIER_DECODE_ATTEMPTS` | `3` | tries per segment before a job fails |
 
 ## Develop it
 

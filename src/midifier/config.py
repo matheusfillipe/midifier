@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     # that reach but give the model less context to place a part in.
     segment_seconds: float = 60.0
 
+    # How many times a single decode is attempted. A hang on the accelerator kills the
+    # subprocess without touching the audio, and the retry usually succeeds, so one attempt
+    # turns a hardware quirk into a failed job for no reason.
+    decode_attempts: int = 3
+
     # --- input limits ---
     max_upload_bytes: int = 100 * 1024 * 1024
     max_duration_seconds: float = 360.0
