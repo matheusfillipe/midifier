@@ -33,7 +33,11 @@ from midifier.midi import segments
 from midifier.midi.consolidate import consolidate
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from midifier.config import Settings
+
+    Progress = Callable[[int, int], None]
 
 # Beyond this a decode is not slow, it is stuck; a segment runs at roughly three times its own
 # length and one that has gone far past that will not recover.
@@ -152,8 +156,12 @@ def _is_transient(message: str) -> bool:
     return any(marker in message for marker in TRANSIENT_MARKERS)
 
 
-def transcribe(audio: Path, settings: Settings) -> Result:
-    """Run the pipeline over one file and return a finished MIDI."""
+def transcribe(audio: Path, settings: Settings, progress: Progress | None = None) -> Result:
+    """Run the pipeline over one file and return a finished MIDI.
+
+    `progress` is called with (segments done, segments total) as each lands, so a caller can
+    report a wait measured from this song rather than from an average one.
+    """
     duration = _audio_duration(audio)
     length = settings.segment_seconds
 
@@ -163,11 +171,16 @@ def transcribe(audio: Path, settings: Settings) -> Result:
             midi = _decode(audio, work / "out.mid", settings, max(duration * TIMEOUT_MULTIPLIER, MIN_TIMEOUT_SECONDS))
         else:
             timeout = max(length * TIMEOUT_MULTIPLIER, MIN_TIMEOUT_SECONDS)
+            offsets = segments.plan(duration, length)
+            if progress is not None:
+                progress(0, len(offsets))
             decoded = []
-            for index, offset in enumerate(segments.plan(duration, length)):
+            for index, offset in enumerate(offsets):
                 clip = work / f"s{index}.wav"
                 _cut(audio, offset, length, clip)
                 decoded.append((offset, _decode(clip, work / f"s{index}.mid", settings, timeout)))
+                if progress is not None:
+                    progress(index + 1, len(offsets))
             midi = segments.stitch(decoded, length)
 
         dropped = consolidate(midi)

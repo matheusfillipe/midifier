@@ -49,7 +49,7 @@ def settings(tmp_path: Path) -> Settings:
 
 class TestSuccess:
     def test_records_tracks_and_a_url(self, settings: Settings, monkeypatch: MonkeyPatch) -> None:
-        monkeypatch.setattr("midifier.worker.transcribe", lambda audio, cfg: _result())
+        monkeypatch.setattr("midifier.worker.transcribe", lambda audio, cfg, progress=None: _result())
         store = JobStore()
         job = store.create(source="song.mp3")
 
@@ -64,7 +64,7 @@ class TestSuccess:
         assert done.finished_at is not None
 
     def test_stores_the_midi_where_the_url_points(self, settings: Settings, monkeypatch: MonkeyPatch) -> None:
-        monkeypatch.setattr("midifier.worker.transcribe", lambda audio, cfg: _result())
+        monkeypatch.setattr("midifier.worker.transcribe", lambda audio, cfg, progress=None: _result())
         store = JobStore()
         job = store.create()
 
@@ -73,7 +73,7 @@ class TestSuccess:
         assert (settings.local_storage_dir / f"{job.id}.mid").read_bytes() == MIDI_BYTES
 
     def test_clears_the_stage_when_finished(self, settings: Settings, monkeypatch: MonkeyPatch) -> None:
-        monkeypatch.setattr("midifier.worker.transcribe", lambda audio, cfg: _result())
+        monkeypatch.setattr("midifier.worker.transcribe", lambda audio, cfg, progress=None: _result())
         store = JobStore()
         job = store.create()
 
@@ -85,7 +85,7 @@ class TestSuccess:
 
 class TestFailure:
     def test_a_model_failure_lands_on_the_job(self, settings: Settings, monkeypatch: MonkeyPatch) -> None:
-        def explode(audio: Path, cfg: Settings) -> Result:
+        def explode(audio: Path, cfg: Settings, progress: object = None) -> Result:
             raise TranscriptionError("GPU Hang")
 
         monkeypatch.setattr("midifier.worker.transcribe", explode)
@@ -102,7 +102,7 @@ class TestFailure:
 
     def test_audio_longer_than_the_limit_is_refused(self, settings: Settings, monkeypatch: MonkeyPatch) -> None:
         """The check runs after transcription because duration comes from the audio itself."""
-        monkeypatch.setattr("midifier.worker.transcribe", lambda audio, cfg: _result(duration=99_999.0))
+        monkeypatch.setattr("midifier.worker.transcribe", lambda audio, cfg, progress=None: _result(duration=99_999.0))
         store = JobStore()
         job = store.create()
 

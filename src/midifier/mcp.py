@@ -89,9 +89,12 @@ def create_mcp(settings: Settings | None = None) -> FastMCP:
             return {"error": f"no such job: {job_id}"}
 
         where = queue.position(job_id) if not job.done else None
+        measured = job.measured_eta_seconds
         return {
             "queue_ahead": where.ahead if where else None,
-            "eta_seconds": where.eta_seconds if where else None,
+            "eta_seconds": measured if measured is not None else (where.eta_seconds if where else None),
+            "segments_done": job.segments_done or None,
+            "segments_total": job.segments_total or None,
             "state": str(job.state),
             "stage": str(job.stage) if job.stage else None,
             "midi_url": job.midi_url,

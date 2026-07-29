@@ -59,6 +59,13 @@ class Job(BaseModel):
     queue_ahead: int | None = None
     eta_seconds: float | None = None
 
+    # Decoding cost tracks the notes a song generates, not its length, and dense songs cost
+    # several times what sparse ones do. Counting segments as they land measures this song
+    # instead of assuming an average one.
+    segments_done: int = 0
+    segments_total: int = 0
+    decoding_since: datetime | None = None
+
     midi_url: str | None = None
     tracks: list[Track] = Field(default_factory=list)
     dropped_instruments: list[str] = Field(default_factory=list)
@@ -67,6 +74,15 @@ class Job(BaseModel):
     @property
     def done(self) -> bool:
         return self.state in {JobState.SUCCEEDED, JobState.FAILED, JobState.CANCELLED}
+
+    @property
+    def measured_eta_seconds(self) -> float | None:
+        """Seconds left, from the pace this song has actually decoded at so far."""
+        if self.done or not self.segments_done or not self.segments_total or self.decoding_since is None:
+            return None
+        elapsed = (datetime.now(UTC) - self.decoding_since).total_seconds()
+        remaining = self.segments_total - self.segments_done
+        return round(elapsed / self.segments_done * remaining, 1)
 
 
 class JobStore:

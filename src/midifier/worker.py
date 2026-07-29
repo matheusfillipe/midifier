@@ -49,8 +49,12 @@ def run_job(
                 assert url is not None
                 audio.write_bytes(fetch_audio(url, settings.max_upload_bytes).content)
 
-            store.update(job_id, stage=Stage.TRANSCRIBING)
-            result = transcribe(audio, settings)
+            store.update(job_id, stage=Stage.TRANSCRIBING, decoding_since=datetime.now(UTC))
+
+            def progress(done: int, total: int) -> None:
+                store.update(job_id, segments_done=done, segments_total=total)
+
+            result = transcribe(audio, settings, progress)
 
             if result.duration > settings.max_duration_seconds:
                 raise TranscriptionError(

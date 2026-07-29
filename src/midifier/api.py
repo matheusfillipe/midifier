@@ -159,8 +159,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "no such job")
         if not job.done:
             where = queue.position(job_id)
+            # Once segments start landing the job has measured this song; before that the
+            # queue's average is the only thing available.
+            eta = job.measured_eta_seconds
             if where is not None:
-                return job.model_copy(update={"queue_ahead": where.ahead, "eta_seconds": where.eta_seconds})
+                return job.model_copy(
+                    update={"queue_ahead": where.ahead, "eta_seconds": eta if eta is not None else where.eta_seconds}
+                )
+            if eta is not None:
+                return job.model_copy(update={"eta_seconds": eta})
         return job
 
     @app.delete(
