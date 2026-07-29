@@ -10,12 +10,16 @@ from midifier.jobs import Job
 from midifier.jobs import JobState
 
 
-def _running(done: int, total: int, seconds_ago: float) -> Job:
+def _running(done: int, total: int, seconds_ago: float, into_current: float = 0.0) -> Job:
+    """`seconds_ago` is how long the finished segments took; `into_current` how long the
+    running one has been going."""
+    now = datetime.now(UTC)
     return Job(
         state=JobState.RUNNING,
         segments_done=done,
         segments_total=total,
-        decoding_since=datetime.now(UTC) - timedelta(seconds=seconds_ago),
+        decoding_since=now - timedelta(seconds=seconds_ago + into_current),
+        last_segment_at=now - timedelta(seconds=into_current),
     )
 
 
@@ -40,6 +44,17 @@ class TestMeasuredEta:
 
     def test_the_last_segment_leaves_nothing_to_wait_for(self) -> None:
         assert _running(done=5, total=5, seconds_ago=500.0).measured_eta_seconds == 0.0
+
+    def test_the_estimate_falls_while_a_segment_runs(self) -> None:
+        """An estimate that climbs as you wait is worse than none: it tells a caller to sleep
+        longer the longer it has already slept."""
+        early = _running(done=2, total=6, seconds_ago=200.0, into_current=10.0).measured_eta_seconds
+        later = _running(done=2, total=6, seconds_ago=200.0, into_current=90.0).measured_eta_seconds
+        assert early is not None and later is not None
+        assert later < early
+
+    def test_it_never_reports_a_negative_wait(self) -> None:
+        assert _running(done=1, total=2, seconds_ago=100.0, into_current=9_000.0).measured_eta_seconds == 0.0
 
     def test_a_finished_job_has_no_estimate(self) -> None:
         job = Job(

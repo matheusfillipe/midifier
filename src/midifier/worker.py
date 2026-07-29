@@ -52,7 +52,7 @@ def run_job(
             store.update(job_id, stage=Stage.TRANSCRIBING, decoding_since=datetime.now(UTC))
 
             def progress(done: int, total: int) -> None:
-                store.update(job_id, segments_done=done, segments_total=total)
+                store.update(job_id, segments_done=done, segments_total=total, last_segment_at=datetime.now(UTC))
 
             result = transcribe(audio, settings, progress)
 

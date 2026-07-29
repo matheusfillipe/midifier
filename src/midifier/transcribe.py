@@ -25,12 +25,15 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import Literal
 
 import pretty_midi
 
 from midifier.midi import cleanup
 from midifier.midi import segments
 from midifier.midi.consolidate import consolidate
+
+ModelSize = Literal["small", "medium", "large"]
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -49,6 +52,11 @@ TRANSIENT_MARKERS = ("GPU Hang", "HW Exception", "HIPFFT", "CUDA error", "out of
 
 # Long enough for a driver to settle after a reset before the next process asks for the device.
 RETRY_PAUSE_SECONDS = 5.0
+
+# Sizes to fall back through when one keeps hanging. A missing kernel is specific to the shapes
+# a size produces, so a smaller model often decodes audio the larger one cannot -- and one
+# segment transcribed less well beats a song that fails outright.
+SMALLER_MODEL: dict[str, ModelSize] = {"large": "medium", "medium": "small"}
 
 logger = logging.getLogger(__name__)
 
@@ -128,27 +136,38 @@ def _decode(audio: Path, destination: Path, settings: Settings, timeout: float) 
     next attempt, in a fresh process with a fresh device context. Retrying here turns an
     intermittent hardware fault into a slower success instead of a failed job.
     """
+    model: ModelSize = settings.model_size
     attempts = settings.decode_attempts
-    for attempt in range(1, attempts + 1):
-        try:
-            _run(
-                [str(audio), "-o", str(destination), "-f", "midi", "-m", settings.model_size, "-d", settings.device],
-                timeout,
-                settings,
-            )
-        except TranscriptionError as error:
-            if attempt == attempts or not _is_transient(str(error)):
-                raise
-            logger.warning("decode of %s failed (attempt %d/%d), retrying: %s", audio.name, attempt, attempts, error)
-            destination.unlink(missing_ok=True)
-            time.sleep(RETRY_PAUSE_SECONDS)
-            continue
+    while True:
+        for attempt in range(1, attempts + 1):
+            try:
+                _run(
+                    [str(audio), "-o", str(destination), "-f", "midi", "-m", model, "-d", settings.device],
+                    timeout,
+                    settings,
+                )
+            except TranscriptionError as error:
+                if not _is_transient(str(error)):
+                    raise
+                if attempt < attempts:
+                    logger.warning(
+                        "decode of %s failed (%d/%d on %s), retrying: %s", audio.name, attempt, attempts, model, error
+                    )
+                    destination.unlink(missing_ok=True)
+                    time.sleep(RETRY_PAUSE_SECONDS)
+                    continue
+                smaller = SMALLER_MODEL.get(model)
+                if smaller is None:
+                    raise
+                logger.warning("%s keeps failing on %s, falling back to %s", audio.name, model, smaller)
+                destination.unlink(missing_ok=True)
+                time.sleep(RETRY_PAUSE_SECONDS)
+                model = smaller
+                break
 
-        if not destination.is_file():
-            raise TranscriptionError("muscriptor reported success but wrote no file")
-        return pretty_midi.PrettyMIDI(str(destination))
-
-    raise TranscriptionError("decode did not produce a file")
+            if not destination.is_file():
+                raise TranscriptionError("muscriptor reported success but wrote no file")
+            return pretty_midi.PrettyMIDI(str(destination))
 
 
 def _is_transient(message: str) -> bool:

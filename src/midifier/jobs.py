@@ -65,6 +65,7 @@ class Job(BaseModel):
     segments_done: int = 0
     segments_total: int = 0
     decoding_since: datetime | None = None
+    last_segment_at: datetime | None = None
 
     midi_url: str | None = None
     tracks: list[Track] = Field(default_factory=list)
@@ -77,12 +78,21 @@ class Job(BaseModel):
 
     @property
     def measured_eta_seconds(self) -> float | None:
-        """Seconds left, from the pace this song has actually decoded at so far."""
-        if self.done or not self.segments_done or not self.segments_total or self.decoding_since is None:
+        """Seconds left, from the pace this song has actually decoded at so far.
+
+        The pace is taken from finished segments only. Including the running one would divide
+        an ever-growing elapsed time by a count that has not moved yet, so the estimate would
+        climb while the caller waited -- which is the opposite of what an estimate is for.
+        """
+        if self.done or not self.segments_done or not self.segments_total:
             return None
-        elapsed = (datetime.now(UTC) - self.decoding_since).total_seconds()
-        remaining = self.segments_total - self.segments_done
-        return round(elapsed / self.segments_done * remaining, 1)
+        if self.decoding_since is None or self.last_segment_at is None:
+            return None
+        finished = (self.last_segment_at - self.decoding_since).total_seconds()
+        per_segment = finished / self.segments_done
+        in_progress = (datetime.now(UTC) - self.last_segment_at).total_seconds()
+        remaining = per_segment * (self.segments_total - self.segments_done) - in_progress
+        return round(max(remaining, 0.0), 1)
 
 
 class JobStore:
