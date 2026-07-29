@@ -7,6 +7,7 @@ and what matters here is that a job ends in the right state with the right field
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING
 
 import pytest
@@ -121,3 +122,46 @@ class TestFailure:
         done = store.get(job.id)
         assert done is not None
         assert done.state is JobState.FAILED
+
+
+class TestStrandedJobs:
+    """A job that stops moving is worse than one that fails: a caller polls it forever."""
+
+    def test_a_dead_link_fails_the_job(self, settings: Settings, monkeypatch: MonkeyPatch) -> None:
+        from midifier.fetch import FetchError
+
+        def dead(url: str, limit: int) -> None:
+            raise FetchError("could not fetch https://example.invalid/x.mp3: 404 Not Found")
+
+        monkeypatch.setattr("midifier.worker.fetch_audio", dead)
+        store = JobStore()
+        job = store.create(source="https://example.invalid/x.mp3")
+
+        run_job(job.id, store, settings, payload=None, url="https://example.invalid/x.mp3")
+
+        done = store.get(job.id)
+        assert done is not None
+        assert done.state is JobState.FAILED
+        assert "404" in (done.error or "")
+
+    def test_an_unexpected_error_still_ends_the_job(self, settings: Settings, monkeypatch: MonkeyPatch) -> None:
+        """Whatever escapes run_job must not leave the caller polling a job that never moves."""
+        import midifier.state as state
+
+        def boom(*args: object, **kwargs: object) -> None:
+            raise KeyboardInterrupt("something no one predicted")
+
+        monkeypatch.setattr("midifier.worker.run_job", boom)
+        job = state.store.create(source="song.mp3")
+        state.start(job.id, settings, payload=b"audio")
+
+        for _ in range(200):
+            current = state.store.get(job.id)
+            if current is not None and current.done:
+                break
+            time.sleep(0.02)
+
+        current = state.store.get(job.id)
+        assert current is not None
+        assert current.state is JobState.FAILED
+        assert "KeyboardInterrupt" in (current.error or "")

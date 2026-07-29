@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from midifier.fetch import FetchError
 from midifier.fetch import UnsafeUrlError
 from midifier.fetch import fetch_audio
 from midifier.jobs import JobState
@@ -59,7 +60,7 @@ def run_job(
             store.update(job_id, stage=Stage.STORING)
             midi_url = build_storage(settings).put(f"{job_id}.mid", result.midi)
 
-    except (TranscriptionError, UnsafeUrlError, OSError) as error:
+    except (TranscriptionError, FetchError, UnsafeUrlError, OSError) as error:
         logger.exception("job %s failed", job_id)
         store.update(
             job_id,

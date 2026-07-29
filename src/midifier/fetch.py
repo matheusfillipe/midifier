@@ -24,6 +24,10 @@ class UnsafeUrlError(ValueError):
     """The URL points somewhere this service refuses to fetch from."""
 
 
+class FetchError(RuntimeError):
+    """The URL was acceptable but the download did not succeed."""
+
+
 @dataclass(frozen=True)
 class Fetched:
     content: bytes
@@ -68,6 +72,15 @@ def fetch_audio(url: str, max_bytes: int, timeout: float = 30.0) -> Fetched:
     """Download an audio file, re-validating the target at every redirect."""
     current = assert_public_url(url)
 
+    try:
+        return _fetch(current, max_bytes, timeout)
+    except httpx.HTTPError as error:
+        # httpx raises its own hierarchy, which the worker does not catch; left unwrapped a
+        # dead link kills the worker thread and the job sits "running" forever.
+        raise FetchError(f"could not fetch {current}: {error}") from error
+
+
+def _fetch(current: str, max_bytes: int, timeout: float) -> Fetched:
     with httpx.Client(follow_redirects=False, timeout=timeout) as client:
         for _ in range(MAX_REDIRECTS + 1):
             with client.stream("GET", current) as response:
