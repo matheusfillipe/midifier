@@ -7,7 +7,6 @@ tool added here appears to the bot after a restart with no client change.
 
 from __future__ import annotations
 
-import time
 from contextvars import ContextVar
 from typing import Annotated
 
@@ -29,13 +28,10 @@ KEY_FIELD = Field(description="API key. Not needed when the request already carr
 # present, still supplies one as an argument.
 authenticated: ContextVar[bool] = ContextVar("authenticated", default=False)
 
+
 # A status call waits this long for something to change before answering. An agent has no
 # way to sleep between calls, so without this it polls as fast as it can think, which
 # wastes its context and tells it nothing new. Waiting server-side paces the loop for it.
-MAX_WAIT_SECONDS = 240.0
-POLL_INTERVAL = 1.0
-
-
 class NotAuthorizedError(RuntimeError):
     """The supplied key does not match."""
 
@@ -80,30 +76,18 @@ def create_mcp(settings: Settings | None = None) -> FastMCP:
     def transcription_status(
         job_id: Annotated[str, Field(description="Job id returned by transcribe_audio.")],
         api_key: Annotated[str | None, KEY_FIELD] = None,
-        wait_seconds: Annotated[
-            float | None,
-            Field(description="Hold the call open this long waiting for progress. Zero answers at once."),
-        ] = None,
     ) -> dict[str, object]:
         """Check a transcription, including its place in the queue and estimated wait.
 
-        The call waits for something to change before answering, so calling it in a loop
-        polls at a sensible rate on its own. Just call it again when it returns.
+        This answers at once. A caller with minutes to wait should sleep on its own side and
+        ask again: holding the request open instead puts the wait behind every proxy on the
+        path, where it fails in ways that look like the service being broken.
         """
         _check(api_key)
         job = store.get(job_id)
         if job is None:
             return {"error": f"no such job: {job_id}"}
 
-        hold = resolved.status_hold_seconds if wait_seconds is None else max(wait_seconds, 0.0)
-        deadline = time.monotonic() + min(hold, MAX_WAIT_SECONDS)
-        seen = (job.state, job.stage)
-        while not job.done and (job.state, job.stage) == seen and time.monotonic() < deadline:
-            time.sleep(POLL_INTERVAL)
-            current = store.get(job_id)
-            if current is None:
-                break
-            job = current
         where = queue.position(job_id) if not job.done else None
         return {
             "queue_ahead": where.ahead if where else None,

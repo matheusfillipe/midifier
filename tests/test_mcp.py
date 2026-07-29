@@ -57,11 +57,11 @@ class TestTranscribeAudio:
         job_id = payload_of(started)["job_id"]
 
         # wait_seconds=0 so the long poll returns at once rather than holding the test open
-        status = await mcp_server.call_tool("transcription_status", {"job_id": job_id, "wait_seconds": 0})
+        status = await mcp_server.call_tool("transcription_status", {"job_id": job_id})
         assert payload_of(status)["state"] == "queued"
 
     async def test_unknown_job_reports_an_error(self, mcp_server: FastMCP) -> None:
-        result = await mcp_server.call_tool("transcription_status", {"job_id": "missing", "wait_seconds": 0})
+        result = await mcp_server.call_tool("transcription_status", {"job_id": "missing"})
         assert "no such job" in payload_of(result)["error"]
 
 
@@ -89,24 +89,15 @@ class TestWorkActuallyStarts:
         store._jobs.clear()
 
 
-class TestStatusHold:
-    """Every call that returns costs the caller a model round-trip, so the hold is the knob
-    that decides how expensive polling is for an agent."""
-
-    async def test_holds_for_the_configured_time_by_default(self, mcp_server: FastMCP) -> None:
-        from midifier.config import Settings
-
-        assert Settings().status_hold_seconds > 30.0
-
-    async def test_a_caller_can_ask_for_a_shorter_hold(self, mcp_server: FastMCP) -> None:
+class TestStatusIsImmediate:
+    async def test_status_answers_without_waiting(self, mcp_server: FastMCP) -> None:
+        """A caller with minutes to wait sleeps on its own side; the service never holds."""
         import time
 
         from midifier.state import store
 
         job = store.create(source="song.mp3")
         started = time.monotonic()
-        payload = payload_of(
-            await mcp_server.call_tool("transcription_status", {"job_id": job.id, "wait_seconds": 1.0})
-        )
-        assert time.monotonic() - started < 10.0
+        payload = payload_of(await mcp_server.call_tool("transcription_status", {"job_id": job.id}))
+        assert time.monotonic() - started < 2.0
         assert payload["state"] == "queued"
