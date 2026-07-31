@@ -1,7 +1,5 @@
 """Stitching segments back together, where lane identity is the thing that can go wrong."""
 
-from __future__ import annotations
-
 import pretty_midi
 
 from midifier.midi import segments

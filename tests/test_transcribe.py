@@ -1,7 +1,5 @@
 """The model runs as a subprocess, so what it inherits is part of the contract."""
 
-from __future__ import annotations
-
 from midifier.config import Settings
 from midifier.transcribe import _environment
 

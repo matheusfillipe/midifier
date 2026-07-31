@@ -1,7 +1,5 @@
 """The queue: one job at a time, and an estimate that learns from real jobs."""
 
-from __future__ import annotations
-
 import contextlib
 import threading
 import time

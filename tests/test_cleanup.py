@@ -1,7 +1,5 @@
 """The cleanup rules are pure functions over notes, so they are tested exactly."""
 
-from __future__ import annotations
-
 import pretty_midi
 
 from midifier.midi.cleanup import clean

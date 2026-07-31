@@ -6,8 +6,6 @@ redirects are followed one at a time with the same check applied to each hop, an
 download stops at a byte ceiling rather than trusting the declared length.
 """
 
-from __future__ import annotations
-
 import ipaddress
 import socket
 from dataclasses import dataclass

@@ -1,7 +1,5 @@
 """Folding lanes that are one part the decoder renamed partway through."""
 
-from __future__ import annotations
-
 import pretty_midi
 
 from midifier.midi.consolidate import consolidate

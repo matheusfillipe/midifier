@@ -1,8 +1,5 @@
 """The REST surface. Transcription takes minutes, so every request is a job."""
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
 from typing import Annotated
 from typing import Literal
 
@@ -18,6 +15,10 @@ from fastapi import UploadFile
 from fastapi import status
 from pydantic import BaseModel
 from pydantic import Field
+from starlette.types import ASGIApp
+from starlette.types import Receive
+from starlette.types import Scope
+from starlette.types import Send
 
 from midifier import __version__
 from midifier.auth import verify
@@ -33,12 +34,6 @@ from midifier.state import start
 from midifier.state import store
 from midifier.storage import StorageError
 from midifier.storage import build_storage
-
-if TYPE_CHECKING:
-    from starlette.types import ASGIApp
-    from starlette.types import Receive
-    from starlette.types import Scope
-    from starlette.types import Send
 
 MIDI_MEDIA_TYPE = "audio/midi"
 

@@ -1,7 +1,5 @@
 """The HTTP contract, including the OpenAPI schema the TypeScript client is built from."""
 
-from __future__ import annotations
-
 from fastapi.testclient import TestClient
 
 from midifier.api import create_app

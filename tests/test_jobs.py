@@ -1,7 +1,5 @@
 """The job model, and the estimate a caller plans its waiting around."""
 
-from __future__ import annotations
-
 from datetime import UTC
 from datetime import datetime
 from datetime import timedelta

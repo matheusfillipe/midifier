@@ -4,19 +4,15 @@ Two backends behind one protocol: the local filesystem, so the service runs with
 infrastructure, and S3/MinIO, which is what kinesthesia reads from.
 """
 
-from __future__ import annotations
-
 import io
 import shutil
-from typing import TYPE_CHECKING
+from pathlib import Path
 from typing import Protocol
 
-if TYPE_CHECKING:
-    from pathlib import Path
+from minio import Minio
+from minio.error import S3Error
 
-    from minio import Minio
-
-    from midifier.config import Settings
+from midifier.config import Settings
 
 MIDI_CONTENT_TYPE = "audio/midi"
 
@@ -102,8 +98,6 @@ class S3Storage:
                 response.release_conn()
 
     def exists(self, key: str) -> bool:
-        from minio.error import S3Error
-
         try:
             self._client.stat_object(self._bucket, key)
         except S3Error:
@@ -120,8 +114,6 @@ def build_storage(settings: Settings) -> Storage:
         raise StorageError(
             "storage_backend is 's3' but MINIO_ENDPOINT / ACCESS_KEY / SECRET_KEY / BUCKET are not all set"
         )
-
-    from minio import Minio
 
     assert settings.minio_endpoint is not None
     assert settings.minio_bucket is not None

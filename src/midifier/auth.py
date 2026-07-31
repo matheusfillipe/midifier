@@ -6,8 +6,6 @@ they carry full random entropy and a plain digest is enough; a slow KDF exists t
 guessable human passwords expensive to attack, which is not the situation here.
 """
 
-from __future__ import annotations
-
 import hashlib
 import secrets
 

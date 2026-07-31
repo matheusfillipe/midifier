@@ -5,12 +5,11 @@ seam is exactly there: the pipeline's own logic is tested in test_cleanup, test_
 and what matters here is that a job ends in the right state with the right fields.
 """
 
-from __future__ import annotations
-
 import time
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
+from pytest import MonkeyPatch
 
 from midifier.config import Settings
 from midifier.jobs import JobState
@@ -20,11 +19,6 @@ from midifier.transcribe import Result
 from midifier.transcribe import Track
 from midifier.transcribe import TranscriptionError
 from midifier.worker import run_job
-
-if TYPE_CHECKING:
-    from pathlib import Path
-
-    from pytest import MonkeyPatch
 
 MIDI_BYTES = b"MThd\x00\x00\x00\x06\x00\x00\x00\x00\x00\x60"
 
@@ -151,7 +145,7 @@ class TestStrandedJobs:
         def boom(*args: object, **kwargs: object) -> None:
             raise KeyboardInterrupt("something no one predicted")
 
-        monkeypatch.setattr("midifier.worker.run_job", boom)
+        monkeypatch.setattr("midifier.state.run_job", boom)
         job = state.store.create(source="song.mp3")
         state.start(job.id, settings, payload=b"audio")
 

@@ -1,29 +1,24 @@
 """Runs transcriptions off the request thread and records what happened on the job."""
 
-from __future__ import annotations
-
 import logging
 import tempfile
 import time
 from datetime import UTC
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
 
+from midifier.config import Settings
 from midifier.fetch import FetchError
 from midifier.fetch import UnsafeUrlError
 from midifier.fetch import fetch_audio
 from midifier.jobs import JobState
+from midifier.jobs import JobStore
 from midifier.jobs import Stage
 from midifier.jobs import Track
+from midifier.queue import JobQueue
 from midifier.storage import build_storage
 from midifier.transcribe import TranscriptionError
 from midifier.transcribe import transcribe
-
-if TYPE_CHECKING:
-    from midifier.config import Settings
-    from midifier.jobs import JobStore
-    from midifier.queue import JobQueue
 
 logger = logging.getLogger(__name__)
 

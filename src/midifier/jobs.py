@@ -1,19 +1,14 @@
 """Job lifecycle for transcriptions, which take minutes rather than milliseconds."""
 
-from __future__ import annotations
-
 import uuid
+from collections.abc import Iterator
 from datetime import UTC
 from datetime import datetime
 from enum import StrEnum
 from threading import Lock
-from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 from pydantic import Field
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
 
 
 class JobState(StrEnum):

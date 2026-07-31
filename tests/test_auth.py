@@ -1,7 +1,5 @@
 """Key checking. The service stores a digest, never the key."""
 
-from __future__ import annotations
-
 from midifier.auth import generate_key
 from midifier.auth import hash_key
 from midifier.auth import verify

@@ -1,7 +1,5 @@
 """SSRF guards. This service sits inside a home network, so these are load-bearing."""
 
-from __future__ import annotations
-
 import pytest
 
 from midifier.fetch import UnsafeUrlError

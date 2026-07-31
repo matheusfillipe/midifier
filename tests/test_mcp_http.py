@@ -5,8 +5,6 @@ are far easier to configure with a bearer token or an api-key header than with a
 threaded through every tool call. Both are accepted here.
 """
 
-from __future__ import annotations
-
 from fastapi.testclient import TestClient
 
 from midifier.api import create_app

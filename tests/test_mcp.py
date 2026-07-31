@@ -1,21 +1,15 @@
 """MCP tools. Kinesthesia discovers these over `tools/list`, so names and shapes matter."""
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
+from fastmcp import FastMCP
+from fastmcp.tools import ToolResult
 
 from midifier.config import Settings
 from midifier.mcp import create_mcp
 from midifier.state import store
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
-
-    from fastmcp import FastMCP
-    from fastmcp.tools import ToolResult
 
 
 def payload_of(result: ToolResult) -> dict[str, Any]:

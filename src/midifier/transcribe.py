@@ -15,32 +15,25 @@ is the interface its authors support, and a decode that wedges the GPU takes the
 down instead of the service.
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import subprocess
 import tempfile
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 from typing import Literal
 
 import pretty_midi
 
+from midifier.config import Settings
 from midifier.midi import cleanup
 from midifier.midi import segments
 from midifier.midi.consolidate import consolidate
 
 ModelSize = Literal["small", "medium", "large"]
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from midifier.config import Settings
-
-    Progress = Callable[[int, int], None]
+Progress = Callable[[int, int], None]
 
 # Beyond this a decode is not slow, it is stuck; a segment runs at roughly three times its own
 # length and one that has gone far past that will not recover.

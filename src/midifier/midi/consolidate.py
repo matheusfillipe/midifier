@@ -10,12 +10,7 @@ thing that is unreliable. Two parts that genuinely coexist are never folded, how
 their ranges.
 """
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import pretty_midi
+import pretty_midi
 
 # How much of the narrower part's register the two must share before they are candidates.
 REGISTER_SHARE = 0.5

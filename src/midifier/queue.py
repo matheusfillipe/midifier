@@ -9,16 +9,11 @@ processing time to audio length, so the queue converges on whatever the machine 
 does rather than on a number written for one particular GPU.
 """
 
-from __future__ import annotations
-
 import logging
 import threading
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 

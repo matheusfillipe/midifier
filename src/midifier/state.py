@@ -5,21 +5,17 @@ REST, and both must contend for the same single transcription slot. Keeping thes
 rather than in either surface also stops the two importing each other.
 """
 
-from __future__ import annotations
-
 import logging
 import threading
 from datetime import UTC
 from datetime import datetime
-from typing import TYPE_CHECKING
 
+from midifier.config import Settings
 from midifier.config import get_settings
 from midifier.jobs import JobState
 from midifier.jobs import JobStore
 from midifier.queue import JobQueue
-
-if TYPE_CHECKING:
-    from midifier.config import Settings
+from midifier.worker import run_job
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +32,6 @@ def start(job_id: str, settings: Settings, payload: bytes | None = None, url: st
     Both surfaces route through here. Doing it in either one alone is how MCP callers
     ended up with jobs that queued and never ran.
     """
-    from midifier.worker import run_job
 
     def work() -> None:
         # run_job ends every failure it anticipates on the job itself. Anything it did not

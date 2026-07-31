@@ -14,15 +14,11 @@ Every rule is conservative. Real music repeats notes and holds them, so each thr
 sits well outside normal playing and only the excess is touched.
 """
 
-from __future__ import annotations
-
 import itertools
 import statistics
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    import pretty_midi
+import pretty_midi
 
 # Longest repeating figure searched for, in notes. Past roughly a bar the search stops
 # finding decoder loops and starts matching song structure.

@@ -11,14 +11,9 @@ The overlap pays for it: both segments transcribe those seconds, so a lane can b
 by what it plays there and inherit the earlier name.
 """
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
+from collections.abc import Iterable
 
 import pretty_midi
-
-if TYPE_CHECKING:
-    from collections.abc import Iterable
 
 # Shared seconds between neighbouring segments, used only to match lanes across the join.
 OVERLAP_SECONDS = 5.0

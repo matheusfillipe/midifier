@@ -1,7 +1,5 @@
 """Run the HTTP API, or the MCP server, from one entry point."""
 
-from __future__ import annotations
-
 import argparse
 
 from midifier.config import get_settings

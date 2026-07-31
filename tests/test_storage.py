@@ -1,8 +1,6 @@
 """Local storage, including the traversal guard."""
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 
@@ -10,9 +8,6 @@ from midifier.config import Settings
 from midifier.storage import LocalStorage
 from midifier.storage import StorageError
 from midifier.storage import build_storage
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 class TestLocalStorage:

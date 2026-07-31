@@ -5,8 +5,6 @@ what it costs. Kinesthesia's own MCP server discovers tools over `tools/list`, m
 tool added here appears to the bot after a restart with no client change.
 """
 
-from __future__ import annotations
-
 from contextvars import ContextVar
 from typing import Annotated
 

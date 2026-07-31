@@ -1,8 +1,7 @@
 """Shared fixtures. Nothing here touches the network or a transcription model."""
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
+from collections.abc import Iterator
+from pathlib import Path
 
 import pretty_midi
 import pytest
@@ -11,10 +10,6 @@ from fastapi.testclient import TestClient
 from midifier.api import create_app
 from midifier.config import Settings
 from midifier.state import store
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
-    from pathlib import Path
 
 
 @pytest.fixture
