@@ -5,8 +5,10 @@ import pretty_midi
 from midifier.midi.consolidate import consolidate
 
 
-def _instrument(name: str, notes: list[tuple[float, int]], is_drum: bool = False) -> pretty_midi.Instrument:
-    inst = pretty_midi.Instrument(program=0, is_drum=is_drum, name=name)
+def _instrument(
+    name: str, notes: list[tuple[float, int]], is_drum: bool = False, program: int = 0
+) -> pretty_midi.Instrument:
+    inst = pretty_midi.Instrument(program=program, is_drum=is_drum, name=name)
     inst.notes = [pretty_midi.Note(velocity=100, pitch=pitch, start=start, end=start + 0.2) for start, pitch in notes]
     return inst
 
@@ -61,6 +63,22 @@ class TestFolding:
             _instrument("drums", _line(0.0, 40), is_drum=True),
             _instrument("distorted electric guitar", _line(40.0, 40)),
         )
+        assert consolidate(midi) == []
+
+    def test_a_bass_is_not_folded_into_a_piano(self) -> None:
+        """Two instruments taking turns is what a song sounds like, not one part renamed."""
+        midi = _midi(
+            _instrument("electric piano", _line(0.0, 40, low=48), program=2),
+            _instrument("electric bass", _line(40.0, 40, low=48), program=33),
+        )
+        assert consolidate(midi) == []
+
+    def test_a_narrow_part_inside_a_wide_one_is_left_alone(self) -> None:
+        """Register share is measured against the wider lane, or a broad lane swallows anything
+        that happens to sit inside its range -- and each fold widens it further."""
+        wide = _instrument("electric piano", _line(0.0, 40, low=36), program=2)
+        wide.notes.append(pretty_midi.Note(velocity=100, pitch=100, start=1.0, end=1.2))
+        midi = _midi(wide, _instrument("acoustic piano", _line(40.0, 40, low=40), program=0))
         assert consolidate(midi) == []
 
     def test_three_fragments_of_one_part_all_collapse(self) -> None:

@@ -47,6 +47,20 @@ class TestStitch:
         merged = segments.stitch([(0.0, first), (55.0, second)], 60.0)
         assert sum(len(inst.notes) for inst in merged.instruments) == 1
 
+    def test_the_seam_keeps_the_arriving_segment(self) -> None:
+        """A decode degenerates as it runs, so the incoming opening beats the outgoing tail."""
+        first = _segment(_instrument("bass", [(56.0, 40)]))
+        second = _segment(_instrument("bass", [(1.0, 55)]))
+        merged = segments.stitch([(0.0, first), (55.0, second)], 60.0)
+        assert [note.pitch for inst in merged.instruments for note in inst.notes] == [55]
+
+    def test_a_part_the_previous_segment_lost_returns_at_the_seam(self) -> None:
+        first = _segment(_instrument("bass", [(1.0, 40)]))
+        second = _segment(_instrument("bass", [(1.0, 40)]), _instrument("voice", [(1.0, 60)]))
+        merged = segments.stitch([(0.0, first), (55.0, second)], 60.0)
+        voice = next(inst for inst in merged.instruments if inst.name == "voice")
+        assert [note.start for note in voice.notes] == [56.0]
+
     def test_a_relabelled_part_keeps_the_earlier_name(self) -> None:
         """The whole band appearing to change instrument at a seam is what this prevents."""
         shared = [(56.0, 40), (56.5, 43), (57.0, 45)]

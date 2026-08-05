@@ -12,7 +12,9 @@ their ranges.
 
 import pretty_midi
 
-# How much of the narrower part's register the two must share before they are candidates.
+# How much of the wider part's register the two must share before they are candidates. Against
+# the narrower, any lane sitting inside a broad lane's range matches it, and a fold only widens
+# the survivor, so one broad lane goes on to swallow the whole song.
 REGISTER_SHARE = 0.5
 
 # Above this much shared airtime they are two parts playing together, not one relabelled.
@@ -41,13 +43,23 @@ def _coincidences(a: pretty_midi.Instrument, b: pretty_midi.Instrument) -> int:
     return sum(1 for n in a.notes if any(abs(x.start - n.start) < SIMULTANEOUS_WINDOW for x in b.notes))
 
 
+def _family(instrument: pretty_midi.Instrument) -> int:
+    """General MIDI numbers instruments in groups of eight."""
+    return int(instrument.program) // 8
+
+
 def _is_one_part(a: pretty_midi.Instrument, b: pretty_midi.Instrument) -> bool:
+    # The decoder renames a part within itself, so a rename stays in its group. A bass and a
+    # piano handing over is two parts taking turns, which is what a song sounds like.
+    if _family(a) != _family(b):
+        return False
+
     low_a, high_a = _register(a)
     low_b, high_b = _register(b)
-    narrower = min(high_a - low_a, high_b - low_b)
-    if narrower <= 0:
+    widest = max(high_a - low_a, high_b - low_b)
+    if widest <= 0:
         return False
-    if _overlap((low_a, high_a), (low_b, high_b)) / narrower < REGISTER_SHARE:
+    if _overlap((low_a, high_a), (low_b, high_b)) / widest < REGISTER_SHARE:
         return False
 
     span_a, span_b = _span(a), _span(b)

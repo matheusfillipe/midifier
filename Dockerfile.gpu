@@ -50,19 +50,13 @@ RUN uv pip install --index-url https://rocm.nightlies.amd.com/v2/gfx110X-all/ \
         "torch==${ROCM_TORCH}" \
         "torchaudio==${ROCM_TORCH}"
 
-# muscriptor pulls its own torch, which would replace the ROCm build with a CPU one, so
-# its dependencies are installed explicitly instead.
-RUN uv pip install --no-deps muscriptor && \
-    uv pip install \
-        einops \
-        huggingface-hub \
-        mido \
-        numpy \
-        packaging \
-        python-multipart \
-        safetensors \
-        soundfile \
-        typer
+# muscriptor pulls its own torch, which would replace the ROCm build with a CPU one. A
+# constraint holds torch at the build above while everything else resolves normally --
+# listing its dependencies by hand instead breaks on the release that adds one, and its
+# CLI imports every one of them at startup.
+ARG MUSCRIPTOR=0.3.0
+RUN printf 'torch==%s\ntorchaudio==%s\n' "${ROCM_TORCH}" "${ROCM_TORCH}" > /tmp/torch.txt && \
+    uv pip install --constraint /tmp/torch.txt "muscriptor==${MUSCRIPTOR}"
 
 WORKDIR /app
 COPY . .

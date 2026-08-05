@@ -85,8 +85,12 @@ def stitch(parts: Iterable[tuple[float, pretty_midi.PrettyMIDI]], length: float)
 
     for index, (offset, segment) in enumerate(parts):
         renames = _inherited_names(segment, previous, is_drum) if previous else {}
-        # Everything before the seam was already taken from the previous segment.
-        floor = OVERLAP_SECONDS if index else 0.0
+        # Both segments transcribe the overlap, and a decode degenerates as it runs: parts
+        # drop out one by one and never come back. The arriving segment is at its freshest
+        # exactly where the previous one is at its worst, so it replaces those seconds.
+        if index:
+            for lane in lanes.values():
+                lane.notes = [note for note in lane.notes if note.start < offset]
 
         for inst in segment.instruments:
             name = renames.get(_name(inst), _name(inst))
@@ -105,7 +109,6 @@ def stitch(parts: Iterable[tuple[float, pretty_midi.PrettyMIDI]], length: float)
                     end=note.end + offset,
                 )
                 for note in inst.notes
-                if note.start >= floor
             )
 
         previous = {}

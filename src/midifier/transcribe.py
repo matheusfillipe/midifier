@@ -89,7 +89,10 @@ def _environment(settings: Settings) -> dict[str, str]:
 
 def _run(args: list[str], timeout: float, settings: Settings) -> None:
     process = subprocess.run(
-        ["python", "-m", "muscriptor", "transcribe", *args],
+        # The decoder detects a tempo per call and writes it in. Stitching builds a new file
+        # and drops those anyway, and a per-segment tempo is a guess from 60 seconds, so the
+        # detection is only cost. Nothing here snaps notes to a grid.
+        ["python", "-m", "muscriptor", "transcribe", "--detect-tempo", "false", *args],
         capture_output=True,
         text=True,
         timeout=timeout,
