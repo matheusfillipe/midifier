@@ -207,15 +207,16 @@ def trim_stuck_chord(
     duration: float,
     tail: float = DEFAULT_TAIL_SECONDS,
 ) -> int:
-    """Cut a wide chord the decoder repeats to the end of the file, leaving one of them.
+    """Cut a wide chord the decoder repeats to the end of the file.
 
     `trim_loops` cannot see this. It tests a flat sequence of pitches, where notes sounding
     together make the period as wide as the chord and any note interleaved between repeats
     resets the count -- so a thirteen-note chord alternating with a single note scores a run
     of zero at every period it searches.
 
-    One cycle survives so the song still ends on the chord, and so that misjudging honest
-    playing costs the repeats rather than the passage.
+    The whole run goes, not all-but-one. Measured on real output the block begins seconds
+    after the part has stopped playing and continues past the end of the audio, so it is
+    invention rather than a chord anyone struck; leaving one copy strands it in the silence.
     """
     cutoff = duration - tail
     removed = 0
@@ -227,7 +228,7 @@ def trim_stuck_chord(
         run = events[len(events) - matches - period :]
         if max(len(pitches) for pitches, _ in run) < MIN_STUCK_CHORD:
             continue
-        doomed = {id(note) for _, group in run[period:] for note in group}
+        doomed = {id(note) for _, group in run for note in group}
         instrument.notes = [note for note in instrument.notes if id(note) not in doomed]
         removed += len(doomed)
     return removed

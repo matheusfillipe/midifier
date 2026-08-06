@@ -122,10 +122,17 @@ class TestTrimStuckChord:
         midi = _midi(self._locked(width=13, cycles=9))
         assert trim_stuck_chord(midi, duration=60.0) > 0
 
-    def test_leaves_one_of_them_so_the_song_still_ends_on_it(self) -> None:
+    def test_takes_the_whole_run(self) -> None:
+        """Leaving one copy strands a chord in the silence the decoder stopped playing in."""
         midi = _midi(self._locked(width=13, cycles=9))
         trim_stuck_chord(midi, duration=60.0)
-        assert len(midi.instruments[0].notes) == 14
+        assert midi.instruments[0].notes == []
+
+    def test_playing_before_the_run_survives(self) -> None:
+        played = [note(60 + index % 5, 30.0 + index * 0.5, 30.4 + index * 0.5) for index in range(12)]
+        midi = _midi(played + self._locked(width=13, cycles=9))
+        trim_stuck_chord(midi, duration=60.0)
+        assert len(midi.instruments[0].notes) == len(played)
 
     def test_a_narrow_figure_is_playing_not_locking(self) -> None:
         """Two notes repeating is a drum figure; width is what tells them apart."""
