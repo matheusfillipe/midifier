@@ -35,6 +35,15 @@ END_TOLERANCE = 0.5
 # runs out of song; a figure repeated in the middle is the music doing it.
 DEFAULT_TAIL_SECONDS = 20.0
 
+# Notes starting this close together are one chord.
+CHORD_WINDOW = 0.05
+
+# A chord this wide, repeated identically to the end, is the decoder locked on it. Width is
+# what separates the two: measured across real output the locked chord is 13 notes, while
+# honest repetition in the same window is a drum figure two notes wide.
+MIN_STUCK_CHORD = 4
+MIN_STUCK_CYCLES = 4
+
 # A part counts as playing a steady figure when this share of its onsets sit within
 # PULSE_TOLERANCE of its own median spacing. Note *lengths* cannot make this judgement:
 # they are note values at the song's tempo, so any fixed threshold is a tempo threshold and
@@ -55,6 +64,7 @@ class CleanupReport:
     notes_before: int
     notes_after: int
     pulse_tracks: list[str]
+    cut_stuck_chord: int = 0
 
 
 def plays_a_pulse(instrument: pretty_midi.Instrument) -> bool:
@@ -169,6 +179,60 @@ def trim_loops(
     return removed
 
 
+def _chord_events(notes: list[pretty_midi.Note]) -> list[tuple[frozenset[int], list[pretty_midi.Note]]]:
+    ordered = sorted(notes, key=lambda note: note.start)
+    events = []
+    for _, group in itertools.groupby(ordered, key=lambda note: round(note.start / CHORD_WINDOW)):
+        together = list(group)
+        events.append((frozenset(note.pitch for note in together), together))
+    return events
+
+
+def _repeating_tail(events: list[tuple[frozenset[int], list[pretty_midi.Note]]]) -> tuple[int, int]:
+    """The (period, matches) of the longest identical block repeating up to the last event."""
+    best = (0, 0)
+    for period in range(1, MAX_PATTERN_PERIOD + 1):
+        matches = 0
+        index = len(events) - 1
+        while index - period >= 0 and events[index][0] == events[index - period][0]:
+            matches += 1
+            index -= 1
+        if matches // period > best[1] // max(best[0], 1):
+            best = (period, matches)
+    return best
+
+
+def trim_stuck_chord(
+    midi: pretty_midi.PrettyMIDI,
+    duration: float,
+    tail: float = DEFAULT_TAIL_SECONDS,
+) -> int:
+    """Cut a wide chord the decoder repeats to the end of the file, leaving one of them.
+
+    `trim_loops` cannot see this. It tests a flat sequence of pitches, where notes sounding
+    together make the period as wide as the chord and any note interleaved between repeats
+    resets the count -- so a thirteen-note chord alternating with a single note scores a run
+    of zero at every period it searches.
+
+    One cycle survives so the song still ends on the chord, and so that misjudging honest
+    playing costs the repeats rather than the passage.
+    """
+    cutoff = duration - tail
+    removed = 0
+    for instrument in midi.instruments:
+        events = _chord_events([note for note in instrument.notes if note.start >= cutoff])
+        period, matches = _repeating_tail(events)
+        if not period or matches // period < MIN_STUCK_CYCLES:
+            continue
+        run = events[len(events) - matches - period :]
+        if max(len(pitches) for pitches, _ in run) < MIN_STUCK_CHORD:
+            continue
+        doomed = {id(note) for _, group in run[period:] for note in group}
+        instrument.notes = [note for note in instrument.notes if id(note) not in doomed]
+        removed += len(doomed)
+    return removed
+
+
 def clean(
     midi: pretty_midi.PrettyMIDI,
     duration: float,
@@ -184,6 +248,7 @@ def clean(
     pulses = [i.name for i in midi.instruments if i.notes and not i.is_drum and plays_a_pulse(i)]
     merged = merge_held(midi, merge_gap, max_merged)
     loops = trim_loops(midi, duration, max_cycles)
+    stuck = trim_stuck_chord(midi, duration)
     after = sum(len(instrument.notes) for instrument in midi.instruments)
     return CleanupReport(
         trimmed_past_end=trimmed,
@@ -192,4 +257,5 @@ def clean(
         notes_before=before,
         notes_after=after,
         pulse_tracks=pulses,
+        cut_stuck_chord=stuck,
     )

@@ -7,6 +7,7 @@ from midifier.midi.cleanup import merge_held
 from midifier.midi.cleanup import plays_a_pulse
 from midifier.midi.cleanup import trim_loops
 from midifier.midi.cleanup import trim_overrun
+from midifier.midi.cleanup import trim_stuck_chord
 
 from .conftest import note
 
@@ -105,6 +106,44 @@ class TestTrimLoops:
         """Only a decode running out of audio degenerates; a repetitive verse is playing."""
         notes = [note(60, index * 0.25, index * 0.25 + 0.2) for index in range(40)]
         assert trim_loops(_midi(notes), duration=300.0, max_cycles=8) == 0
+
+
+class TestTrimStuckChord:
+    def _locked(self, width: int, cycles: int, start: float = 40.0) -> list[pretty_midi.Note]:
+        """A wide chord alternating with a single note, the shape real decodes produce."""
+        notes: list[pretty_midi.Note] = []
+        for cycle in range(cycles):
+            at = start + cycle * 0.44
+            notes.extend(note(57 + step * 4, at, at + 0.4) for step in range(width))
+            notes.append(note(52, at + 0.22, at + 0.42))
+        return notes
+
+    def test_cuts_a_chord_repeated_to_the_end(self) -> None:
+        midi = _midi(self._locked(width=13, cycles=9))
+        assert trim_stuck_chord(midi, duration=60.0) > 0
+
+    def test_leaves_one_of_them_so_the_song_still_ends_on_it(self) -> None:
+        midi = _midi(self._locked(width=13, cycles=9))
+        trim_stuck_chord(midi, duration=60.0)
+        assert len(midi.instruments[0].notes) == 14
+
+    def test_a_narrow_figure_is_playing_not_locking(self) -> None:
+        """Two notes repeating is a drum figure; width is what tells them apart."""
+        midi = _midi(self._locked(width=2, cycles=9))
+        assert trim_stuck_chord(midi, duration=60.0) == 0
+
+    def test_a_few_repeats_are_left_alone(self) -> None:
+        midi = _midi(self._locked(width=13, cycles=3))
+        assert trim_stuck_chord(midi, duration=60.0) == 0
+
+    def test_the_same_chord_mid_song_is_music(self) -> None:
+        midi = _midi(self._locked(width=13, cycles=9, start=40.0))
+        assert trim_stuck_chord(midi, duration=300.0) == 0
+
+    def test_trim_loops_cannot_see_it(self) -> None:
+        """Why this rule exists: a flat pitch sequence scores nothing on a repeated chord."""
+        midi = _midi(self._locked(width=13, cycles=9))
+        assert trim_loops(midi, duration=60.0, max_cycles=8) == 0
 
 
 class TestClean:
