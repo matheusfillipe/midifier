@@ -118,6 +118,49 @@ class TestFailure:
         assert done.state is JobState.FAILED
 
 
+class TestCancellation:
+    def test_a_cancelled_job_stops_decoding_and_keeps_its_state(
+        self, settings: Settings, monkeypatch: MonkeyPatch
+    ) -> None:
+        """Without this the worker runs to the end and overwrites CANCELLED with SUCCEEDED,
+        so the accelerator stays busy for a result nobody is waiting for."""
+        store = JobStore()
+        job = store.create()
+        segments: list[int] = []
+
+        def slow(audio: Path, cfg: Settings, progress: object = None) -> Result:
+            # run_job sets RUNNING before it gets here, so the cancel has to arrive while the
+            # decode is under way -- which is the only moment it can arrive in practice.
+            assert callable(progress)
+            store.update(job.id, state=JobState.CANCELLED)
+            for index in range(4):
+                segments.append(index)
+                progress(index + 1, 4)
+            return _result()
+
+        monkeypatch.setattr("midifier.worker.transcribe", slow)
+
+        run_job(job.id, store, settings, payload=b"audio", url=None)
+
+        done = store.get(job.id)
+        assert done is not None
+        assert done.state is JobState.CANCELLED
+        assert done.midi_url is None
+        assert done.finished_at is not None
+        assert segments == [0], "decoding continued past the first segment boundary"
+
+    def test_a_job_left_alone_still_finishes(self, settings: Settings, monkeypatch: MonkeyPatch) -> None:
+        monkeypatch.setattr("midifier.worker.transcribe", lambda audio, cfg, progress=None: _result())
+        store = JobStore()
+        job = store.create()
+
+        run_job(job.id, store, settings, payload=b"audio", url=None)
+
+        done = store.get(job.id)
+        assert done is not None
+        assert done.state is JobState.SUCCEEDED
+
+
 class TestStrandedJobs:
     """A job that stops moving is worse than one that fails: a caller polls it forever."""
 

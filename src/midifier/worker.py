@@ -23,6 +23,10 @@ from midifier.transcribe import transcribe
 logger = logging.getLogger(__name__)
 
 
+class JobCancelledError(Exception):
+    """Raised inside the decode loop when the job was cancelled while it ran."""
+
+
 def run_job(
     job_id: str,
     store: JobStore,
@@ -47,6 +51,12 @@ def run_job(
             store.update(job_id, stage=Stage.TRANSCRIBING, decoding_since=datetime.now(UTC))
 
             def progress(done: int, total: int) -> None:
+                # A segment boundary is the only place the decode can be interrupted: the
+                # decoder itself is a subprocess we would otherwise have to wait out. Without
+                # this, cancelling only relabels the job and the GPU stays busy to the end.
+                job = store.get(job_id)
+                if job is not None and job.state is JobState.CANCELLED:
+                    raise JobCancelledError(job_id)
                 store.update(job_id, segments_done=done, segments_total=total, last_segment_at=datetime.now(UTC))
 
             result = transcribe(audio, settings, progress)
@@ -58,6 +68,11 @@ def run_job(
 
             store.update(job_id, stage=Stage.STORING)
             midi_url = build_storage(settings).put(f"{job_id}.mid", result.midi)
+
+    except JobCancelledError:
+        logger.info("job %s cancelled, stopped at a segment boundary", job_id)
+        store.update(job_id, stage=None, finished_at=datetime.now(UTC))
+        return
 
     except (TranscriptionError, FetchError, UnsafeUrlError, OSError) as error:
         logger.exception("job %s failed", job_id)
