@@ -7,8 +7,8 @@ for the rest of the song, and an ending it starts inventing runs to the last chu
 caps how far either travels. A closing segment also stops on its own rather than spending its
 budget inventing an ending, so the extra audio a segmented run decodes largely pays for itself.
 
-What segmenting costs is lane identity, since a segment decoded alone has no reason to name a
-part the way its neighbour did. That is repaired afterwards, from the overlap.
+What segmenting costs is instrument identity, since a segment decoded alone has no reason to
+name a part the way its neighbour did. `midi.parts` settles that for the whole song at once.
 
 The model is driven as a subprocess rather than imported. It owns process-wide state, its CLI
 is the interface its authors support, and a decode that wedges the GPU takes the subprocess
@@ -29,8 +29,8 @@ import pretty_midi
 
 from midifier.config import Settings
 from midifier.midi import cleanup
+from midifier.midi import parts
 from midifier.midi import segments
-from midifier.midi.consolidate import consolidate
 
 ModelSize = Literal["small", "medium", "large"]
 Progress = Callable[[int, int], None]
@@ -89,9 +89,9 @@ def _environment(settings: Settings) -> dict[str, str]:
 
 def _run(args: list[str], timeout: float, settings: Settings) -> None:
     process = subprocess.run(
-        # The decoder detects a tempo per call and writes it in. Stitching builds a new file
-        # and drops those anyway, and a per-segment tempo is a guess from 60 seconds, so the
-        # detection is only cost. Nothing here snaps notes to a grid.
+        # The decoder detects a tempo per call and writes it in. We build a new file and drop
+        # those anyway, and a per-segment tempo is a guess from 60 seconds, so the detection is
+        # only cost. Nothing here snaps notes to a grid.
         ["python", "-m", "muscriptor", "transcribe", "--detect-tempo", "false", *args],
         capture_output=True,
         text=True,
@@ -182,23 +182,22 @@ def transcribe(audio: Path, settings: Settings, progress: Progress | None = None
 
     with tempfile.TemporaryDirectory() as workspace:
         work = Path(workspace)
+        decoded: list[tuple[float, pretty_midi.PrettyMIDI]] = []
         if duration <= length:
-            midi = _decode(audio, work / "out.mid", settings, max(duration * TIMEOUT_MULTIPLIER, MIN_TIMEOUT_SECONDS))
+            timeout = max(duration * TIMEOUT_MULTIPLIER, MIN_TIMEOUT_SECONDS)
+            decoded.append((0.0, _decode(audio, work / "out.mid", settings, timeout)))
         else:
             timeout = max(length * TIMEOUT_MULTIPLIER, MIN_TIMEOUT_SECONDS)
             offsets = segments.plan(duration, length)
             if progress is not None:
                 progress(0, len(offsets))
-            decoded = []
             for index, offset in enumerate(offsets):
                 clip = work / f"s{index}.wav"
                 _cut(audio, offset, length, clip)
                 decoded.append((offset, _decode(clip, work / f"s{index}.mid", settings, timeout)))
                 if progress is not None:
                     progress(index + 1, len(offsets))
-            midi = segments.stitch(decoded, length)
-
-        dropped = consolidate(midi)
+        midi, dropped = parts.assemble(decoded)
         report = cleanup.clean(midi, duration)
         output = work / "final.mid"
         midi.write(str(output))

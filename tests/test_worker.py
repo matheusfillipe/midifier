@@ -1,8 +1,8 @@
 """The worker, with the model mocked at its boundary.
 
 Everything below the `transcribe` call is a multi-gigabyte gated model and a GPU, so the
-seam is exactly there: the pipeline's own logic is tested in test_cleanup, test_consolidate and test_segments,
-and what matters here is that a job ends in the right state with the right fields.
+seam is exactly there: the pipeline's own logic is tested in test_cleanup, test_parts and
+test_segments, and what matters here is that a job ends in the right state with the right fields.
 """
 
 import time

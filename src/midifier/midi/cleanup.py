@@ -20,6 +20,8 @@ from dataclasses import dataclass
 
 import pretty_midi
 
+from midifier.midi.notes import chords
+
 # Longest repeating figure searched for, in notes. Past roughly a bar the search stops
 # finding decoder loops and starts matching song structure.
 MAX_PATTERN_PERIOD = 8
@@ -34,9 +36,6 @@ END_TOLERANCE = 0.5
 # Only the last stretch of a decode is trimmed for repetition. The decoder degenerates as it
 # runs out of song; a figure repeated in the middle is the music doing it.
 DEFAULT_TAIL_SECONDS = 20.0
-
-# Notes starting this close together are one chord.
-CHORD_WINDOW = 0.05
 
 # A chord this wide, repeated identically to the end, is the decoder locked on it. Width is
 # what separates the two: measured across real output the locked chord is 13 notes, while
@@ -180,12 +179,7 @@ def trim_loops(
 
 
 def _chord_events(notes: list[pretty_midi.Note]) -> list[tuple[frozenset[int], list[pretty_midi.Note]]]:
-    ordered = sorted(notes, key=lambda note: note.start)
-    events = []
-    for _, group in itertools.groupby(ordered, key=lambda note: round(note.start / CHORD_WINDOW)):
-        together = list(group)
-        events.append((frozenset(note.pitch for note in together), together))
-    return events
+    return [(frozenset(note.pitch for note in group), group) for group in chords(notes)]
 
 
 def _repeating_tail(events: list[tuple[frozenset[int], list[pretty_midi.Note]]]) -> tuple[int, int]:

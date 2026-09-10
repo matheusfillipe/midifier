@@ -57,8 +57,9 @@ src/midifier/
   jobs.py          job model and in-memory store
   midi/
     cleanup.py     repairs the decoder's characteristic defects
-    segments.py    decodes long audio in overlapping pieces and stitches them
-    consolidate.py folds lanes that are one part under two names
+    notes.py       reads chords out of a decode
+    segments.py    where to cut a long decode
+    parts.py       decides the song's instruments from every segment at once
 tests/             mirrors src; e2e/ needs the model and is opt-in
 ```
 
@@ -90,8 +91,8 @@ reintroduce these without new evidence:
 
 - No source separation. Transcribing the full mix beats separating first.
 - No quantization. Snapping to a detected beat grid sounded worse at every strength. The
-  decoder's own tempo detection is off for the same reason, and because stitching builds a new
-  file and would discard a per-segment guess anyway.
+  decoder's own tempo detection is off for the same reason, and because assembling the parts
+  builds a new file and would discard a per-segment guess anyway.
 - No beam search. On `large` it returns byte-identical output for a multiple of the compute.
 - No classifier-free guidance. It splits one song into more instrument classes, not fewer.
 - Cleanup never judges a repeat by note *length*. Note lengths are note values at the song's
