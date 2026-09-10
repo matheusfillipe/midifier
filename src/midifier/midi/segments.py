@@ -12,7 +12,7 @@ segments at once.
 # Shared seconds between neighbouring segments. Read it as `length - OVERLAP_SECONDS`: how far
 # into a decode we trust it before the next segment takes over. That is what governs quality,
 # since a decode degenerates as it runs and the tail we give up is the part that has degenerated.
-OVERLAP_SECONDS = 5.0
+OVERLAP_SECONDS = 15.0
 
 
 def plan(duration: float, length: float) -> list[float]:
