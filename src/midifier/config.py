@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     # --- transcription ---
     model_size: Literal["small", "medium", "large"] = "large"
     device: str = "auto"
+    # The model's own default is float32 except on MPS, so a CUDA card leaves its tensor cores
+    # idle unless we ask for half precision here.
+    dtype: Literal["float32", "float16", "bfloat16"] | None = None
     hf_token: str | None = None
 
     # Audio is decoded in overlapping segments of this length. The model carries each of its

@@ -18,16 +18,23 @@ env:
 
 jobs:
   build:
-    # amd64 only. The transcription stack is x86 ROCm wheels, and an arm64 leg would be
-    # emulated, slow, and unused by anything this deploys to.
+    # amd64 only. Both stacks are x86 wheels, and an arm64 leg would be emulated, slow, and
+    # unused by anything this deploys to. ROCm keeps the plain tags; CUDA carries a suffix.
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - file: Dockerfile.gpu
+            suffix: ""
+          - file: Dockerfile.cuda
+            suffix: "-cuda"
     steps:
       - uses: actions/checkout@v5
 
-      # The ROCm image lands around 6-7GB and a hosted runner starts with roughly 14GB
+      # Either GPU image lands around 6-7GB and a hosted runner starts with roughly 14GB
       # free, which build layers plus cache would exhaust. Dropping toolchains this build
       # never uses buys back well over 20GB.
-      - name: Make room for the ROCm layers
+      - name: Make room for the GPU layers
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
                       /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
@@ -44,6 +51,7 @@ jobs:
         id: meta
         with:
           images: ${{ env.image }}
+          flavor: suffix=${{ matrix.suffix }},onlatest=true
           tags: |
             type=sha,format=short
             type=raw,value=latest,enable={{is_default_branch}}
@@ -52,15 +60,15 @@ jobs:
       - uses: docker/build-push-action@v7
         with:
           context: .
-          file: Dockerfile.gpu
+          file: ${{ matrix.file }}
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Cache to the registry rather than GHA: the ROCm layers alone exceed the
+          # Cache to the registry rather than GHA: the GPU layers alone exceed the
           # 10GB GitHub Actions cache quota and would evict everything else.
-          cache-from: type=registry,ref=${{ env.image }}:buildcache
-          cache-to: type=registry,ref=${{ env.image }}:buildcache,mode=max
+          cache-from: type=registry,ref=${{ env.image }}:buildcache${{ matrix.suffix }}
+          cache-to: type=registry,ref=${{ env.image }}:buildcache${{ matrix.suffix }},mode=max
 
       - name: Report what was published
         run: docker buildx imagetools inspect ${{ env.image }}:${{ steps.meta.outputs.version }}

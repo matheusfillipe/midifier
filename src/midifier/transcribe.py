@@ -134,11 +134,12 @@ def _decode(audio: Path, destination: Path, settings: Settings, timeout: float) 
     """
     model: ModelSize = settings.model_size
     attempts = settings.decode_attempts
+    precision = ["--dtype", settings.dtype] if settings.dtype else []
     while True:
         for attempt in range(1, attempts + 1):
             try:
                 _run(
-                    [str(audio), "-o", str(destination), "-f", "midi", "-m", model, "-d", settings.device],
+                    [str(audio), "-o", str(destination), "-f", "midi", "-m", model, "-d", settings.device, *precision],
                     timeout,
                     settings,
                 )
