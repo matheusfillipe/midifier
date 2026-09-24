@@ -1,6 +1,7 @@
 """Job lifecycle for transcriptions, which take minutes rather than milliseconds."""
 
 import uuid
+from collections.abc import Callable
 from collections.abc import Iterator
 from datetime import UTC
 from datetime import datetime
@@ -101,7 +102,13 @@ class JobStore:
 
     def __init__(self) -> None:
         self._jobs: dict[str, Job] = {}
+        self._watchers: dict[str, Callable[[Job], None]] = {}
         self._lock = Lock()
+
+    def watch(self, job_id: str, watcher: Callable[[Job], None]) -> None:
+        """Call `watcher` with the job after every update, on the updating thread."""
+        with self._lock:
+            self._watchers[job_id] = watcher
 
     def create(self, source: str | None = None) -> Job:
         job = Job(source=source)
@@ -120,7 +127,10 @@ class JobStore:
                 return None
             updated = job.model_copy(update=fields)
             self._jobs[job_id] = updated
-            return updated
+            watcher = self._watchers.pop(job_id, None) if updated.done else self._watchers.get(job_id)
+        if watcher is not None:
+            watcher(updated)
+        return updated
 
     def __iter__(self) -> Iterator[Job]:
         with self._lock:

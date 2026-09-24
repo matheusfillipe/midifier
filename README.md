@@ -34,6 +34,10 @@ completed jobs rather than configured, so it reflects whatever hardware this run
 
 The OpenAPI schema is at `/openapi.json`.
 
+workflows.h4ks.com sells transcription as its `midi` job type. It reads the job's form and price
+from `GET /v1/workflow` and dispatches paid jobs to `POST /v1/workflow/jobs`; we post each job's
+steps, segment progress and the finished MIDI back to the callback URL in the dispatch.
+
 ## Secure it
 
 The service holds only the *hash* of an API key, so reading the deployed secret does not
@@ -67,6 +71,8 @@ Every setting is an environment variable prefixed `MIDIFIER_`. See
 | `MIDIFIER_API_KEY_HASH` | unset | when set, callers must present the key |
 | `MIDIFIER_STORAGE_BACKEND` | `local` | `local` or `s3` |
 | `MIDIFIER_MINIO_BUCKET` | — | with the other `MINIO_*` values, for `s3` |
+| `MIDIFIER_KEY_PREFIX` | empty | prepended to every stored file's key |
+| `MIDIFIER_PLAYER_URL` | kinesthesia's `/watch` | where a workflows result opens |
 | `MIDIFIER_MODEL_SIZE` | `large` | `small`, `medium` or `large` |
 | `MIDIFIER_HF_TOKEN` | — | needed to download the transcription weights |
 | `MIDIFIER_MAX_DURATION_SECONDS` | `360` | longest song accepted |

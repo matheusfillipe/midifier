@@ -25,6 +25,7 @@ from midifier.auth import verify
 from midifier.config import Settings
 from midifier.config import get_settings
 from midifier.fetch import UnsafeUrlError
+from midifier.fetch import assert_public_url
 from midifier.jobs import Job
 from midifier.jobs import JobState
 from midifier.mcp import authenticated
@@ -34,6 +35,10 @@ from midifier.state import start
 from midifier.state import store
 from midifier.storage import StorageError
 from midifier.storage import build_storage
+from midifier.workflow import MANIFEST
+from midifier.workflow import Dispatch
+from midifier.workflow import Manifest
+from midifier.workflow import Reporter
 
 MIDI_MEDIA_TYPE = "audio/midi"
 
@@ -134,6 +139,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # after it. Losing the pod loses the job, which is why one Kubernetes Job per
         # request is the deployment shape rather than a long-lived queue in here.
         start(job.id, resolved, payload=payload, url=url)
+        return JobAccepted(id=job.id, state=job.state)
+
+    @app.get("/v1/workflow", response_model=Manifest, dependencies=[Depends(require_api_key)], tags=["workflow"])
+    def workflow_manifest() -> Manifest:
+        """How workflows.h4ks.com lists and prices transcription."""
+        return MANIFEST
+
+    @app.post(
+        "/v1/workflow/jobs",
+        response_model=JobAccepted,
+        status_code=status.HTTP_202_ACCEPTED,
+        dependencies=[Depends(require_api_key)],
+        tags=["workflow"],
+    )
+    def create_workflow_job(dispatch: Dispatch) -> JobAccepted:
+        """Transcribe a workflows job and post its progress and result to its callback."""
+        url = assert_public_url(str(dispatch.params.url))
+        job = store.create(source=url)
+        store.watch(job.id, Reporter(dispatch, resolved))
+        queue.submit(job.id)
+        start(job.id, resolved, url=url)
         return JobAccepted(id=job.id, state=job.state)
 
     @app.get("/v1/queue", dependencies=[Depends(require_api_key)], tags=["jobs"])

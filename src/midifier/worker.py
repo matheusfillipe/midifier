@@ -67,7 +67,7 @@ def run_job(
                 )
 
             store.update(job_id, stage=Stage.STORING)
-            midi_url = build_storage(settings).put(f"{job_id}.mid", result.midi)
+            midi_url = build_storage(settings).put(f"{settings.key_prefix}{job_id}.mid", result.midi)
 
     except JobCancelledError:
         logger.info("job %s cancelled, stopped at a segment boundary", job_id)

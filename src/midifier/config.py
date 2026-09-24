@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     minio_public_base: str | None = None
     minio_use_ssl: bool = True
     minio_region: str = "us-east-1"
+    key_prefix: str = ""
+
+    # --- workflows ---
+    # Where a finished MIDI opens in a browser. The stored file's URL and name are appended.
+    player_url: str = "https://kinesthesia.h4ks.com/watch"
 
     # --- queue ---
     # One transcription at a time. A second concurrent decode competes for whatever
