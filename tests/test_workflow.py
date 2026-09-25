@@ -161,7 +161,7 @@ class TestEndpoints:
 
         assert manifest["name"] == "midi"
         assert manifest["steps"] == [["fetch", 5], ["transcribe", 90], ["store", 5]]
-        assert "up to 6 minutes" in manifest["description"]
+        assert manifest["params_schema"]["properties"]["url"]["description"].endswith("Up to 6 minutes.")
         assert manifest["params_schema"]["required"] == ["url"]
         assert manifest["params_schema"]["properties"]["url"]["x-upload"] == "audio/*,video/*"
 

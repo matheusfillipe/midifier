@@ -107,16 +107,16 @@ class Dispatch(BaseModel):
 
 
 def manifest(settings: Settings) -> Manifest:
-    minutes = settings.max_duration_seconds / 60
+    params_schema = MidiParams.model_json_schema()
+    params_schema["properties"]["url"]["description"] += f" Up to {settings.max_duration_seconds / 60:g} minutes."
     return Manifest(
         name="midi",
         title="Song to MIDI",
-        description="Turns a song into a multi-track MIDI file with every instrument it hears, "
-        f"and opens it in kinesthesia. Songs up to {minutes:g} minutes.",
+        description="Transcribe audio into multi-track MIDI.",
         pricing="1.5 credits per second of audio, plus 60",
         price="1.5 * duration(url) + 60",
         steps=list(STEPS.values()),
-        params_schema=MidiParams.model_json_schema(),
+        params_schema=params_schema,
     )
 
 
