@@ -97,6 +97,11 @@ class Manifest(BaseModel):
     params_schema: dict[str, object] = Field(description="JSON schema of the params.")
 
 
+class Media(BaseModel):
+    title: str = Field("", description="Title of the page the link pointed at.")
+    duration: float | None = Field(None, description="Length of the downloaded audio in seconds.")
+
+
 class Dispatch(BaseModel):
     job_id: int = Field(description="The job's id in workflows.")
     type: str = Field(description="The job type name.")
@@ -104,6 +109,9 @@ class Dispatch(BaseModel):
     steps: list[str] = Field(description="Step names in order.")
     callback_url: HttpUrl = Field(description="Where to post the job's events.")
     callback_token: str = Field(description="Bearer token for the callbacks.")
+    media: dict[str, Media] = Field(
+        default_factory=dict, description="What workflows learned about each link it downloaded for us."
+    )
 
 
 def manifest(settings: Settings) -> Manifest:
@@ -120,8 +128,11 @@ def manifest(settings: Settings) -> Manifest:
     )
 
 
-def _song_name(url: str) -> str:
-    return PurePosixPath(unquote(urlparse(url).path)).stem[:TITLE_LIMIT] or "song"
+def _song_name(dispatch: Dispatch) -> str:
+    media = dispatch.media.get("url")
+    if media is not None and media.title:
+        return media.title[:TITLE_LIMIT]
+    return PurePosixPath(unquote(urlparse(str(dispatch.params.url)).path)).stem[:TITLE_LIMIT] or "song"
 
 
 class Reporter:
@@ -134,7 +145,7 @@ class Reporter:
     def __init__(self, dispatch: Dispatch, settings: Settings, on_ended: Callable[[], None]) -> None:
         self._url = str(dispatch.callback_url)
         self._headers = {"Authorization": f"Bearer {dispatch.callback_token}"}
-        self._song = _song_name(str(dispatch.params.url))
+        self._song = _song_name(dispatch)
         self._player_url = settings.player_url
         self._on_ended = on_ended
         self._last: Event | None = None

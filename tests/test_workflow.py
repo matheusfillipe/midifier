@@ -60,10 +60,13 @@ def workflows(monkeypatch: MonkeyPatch) -> Iterator[Workflows]:
     yield fake
 
 
-def watched(settings: Settings, song: str = SONG) -> tuple[JobStore, str, Reporter]:
+def watched(
+    settings: Settings, song: str = SONG, media: dict[str, object] | None = None
+) -> tuple[JobStore, str, Reporter]:
     store = JobStore()
     job = store.create()
-    reporter = Reporter(Dispatch.model_validate(dispatch_body(song)), settings, lambda: store.cancel(job.id))
+    body = dispatch_body(song) | ({"media": media} if media else {})
+    reporter = Reporter(Dispatch.model_validate(body), settings, lambda: store.cancel(job.id))
     store.watch(job.id, reporter)
     return store, job.id, reporter
 
@@ -106,6 +109,16 @@ class TestReporter:
         [link] = links
         query = parse_qs(urlparse(link["url"]).query)
         assert query == {"url": [MIDI], "name": ["My Song"]}
+
+    def test_a_downloaded_link_is_named_after_its_page(self, settings: Settings, workflows: Workflows) -> None:
+        private_copy = "https://s3.test/workflows-inputs/7/url.mp3?X-Amz-Signature=abc"
+        store, job_id, reporter = watched(settings, private_copy, {"url": {"title": "Never Gonna", "duration": 213.0}})
+
+        store.update(job_id, state=JobState.SUCCEEDED, stage=None, midi_url=MIDI)
+        finish(reporter)
+
+        [result] = workflows.events
+        assert result["title"] == "Never Gonna"
 
     def test_long_text_fits_what_workflows_accepts(self, settings: Settings, workflows: Workflows) -> None:
         store, job_id, reporter = watched(settings, f"https://s3.test/{'a' * 300}.mp3")
