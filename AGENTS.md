@@ -20,7 +20,7 @@ uv run pytest                # tests
 uv run mypy src tests        # types, strict
 uv run ruff check --fix .    # lint
 uv run ruff format .         # format
-uv run pre-commit run -a     # everything CI runs
+uv run prek run -a     # everything CI runs
 uv run python -m midifier    # serve the API
 ```
 
@@ -32,7 +32,7 @@ uv run python -m midifier    # serve the API
   line. If typing something is hard, that usually means the design is unclear.
 - **One import per line.** `force-single-line = true`; do not group with commas or parentheses.
 - **Coverage stays at or above 80%.** Add tests with the code, not afterwards.
-- **Every check runs in pre-commit**, and CI runs pre-commit. Adding a check anywhere else
+- **Every check runs as a prek hook**, and CI runs prek. Adding a check anywhere else
   splits the definition of "clean" in two.
 - **No bare `except Exception`.** Catch what can actually be raised.
 

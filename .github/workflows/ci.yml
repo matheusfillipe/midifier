@@ -22,10 +22,10 @@ jobs:
           enable-cache: true
       - run: uv sync --frozen --extra dev
 
-      # pre-commit is the single source of truth for what "clean" means, so CI runs the
+      # prek runs the hooks and is the single source of truth for what "clean" means, so CI runs the
       # same hooks a commit does rather than a parallel list that can drift.
-      - name: pre-commit
-        run: uv run --extra dev pre-commit run --all-files --show-diff-on-failure
+      - name: prek
+        run: uv run --extra dev prek run --all-files --show-diff-on-failure
 
       - name: coverage summary
         if: always()

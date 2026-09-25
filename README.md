@@ -83,8 +83,8 @@ Every setting is an environment variable prefixed `MIDIFIER_`. See
 ## Develop it
 
 ```bash
-uv run pre-commit run --all-files   # everything CI runs
-uv run pytest --cov                 # tests, 80% gate
+uv run prek run --all-files   # everything CI runs
+uv run pytest --cov           # tests, 80% gate
 ```
 
 Conventions and the reasoning behind the pipeline are in [AGENTS.md](AGENTS.md).
