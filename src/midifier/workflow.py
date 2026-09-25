@@ -82,7 +82,7 @@ class MidiParams(BaseModel):
 
     url: HttpUrl = Field(
         title="Song",
-        description="A direct link to an audio or video file, or upload one.",
+        description="A link (YouTube, SoundCloud, an audio file) or an upload.",
         json_schema_extra={"x-upload": "audio/*,video/*"},
     )
 
