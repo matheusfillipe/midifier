@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     key_prefix: str = ""
 
     # --- workflows ---
-    # Where a finished MIDI opens in a browser. The stored file's URL and name are appended.
+    # We append a finished MIDI's URL and name to this address to open it in a browser.
     player_url: str = "https://kinesthesia.h4ks.com/watch"
 
     # --- queue ---

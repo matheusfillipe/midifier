@@ -29,6 +29,7 @@ def client(settings: Settings, _no_transcription: None) -> Iterator[TestClient]:
     with TestClient(create_app(settings)) as test_client:
         yield test_client
     store._jobs.clear()
+    store._watchers.clear()
 
 
 def note(pitch: int, start: float, end: float, velocity: int = 100) -> pretty_midi.Note:

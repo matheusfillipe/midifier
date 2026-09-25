@@ -96,7 +96,7 @@ class JobStore:
 
     Deliberately not a queue library. Jobs are long but few, and the deployment target
     runs one Kubernetes Job per request, so durable scheduling is the cluster's problem
-    rather than this process's. Swapping in a shared store means implementing these four
+    rather than this process's. Swapping in a shared store means implementing these
     methods, nothing more.
     """
 
@@ -131,6 +131,11 @@ class JobStore:
         if watcher is not None:
             watcher(updated)
         return updated
+
+    def cancel(self, job_id: str) -> None:
+        job = self.get(job_id)
+        if job is not None and not job.done:
+            self.update(job_id, state=JobState.CANCELLED)
 
     def __iter__(self) -> Iterator[Job]:
         with self._lock:

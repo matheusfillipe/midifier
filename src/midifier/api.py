@@ -35,10 +35,11 @@ from midifier.state import start
 from midifier.state import store
 from midifier.storage import StorageError
 from midifier.storage import build_storage
-from midifier.workflow import MANIFEST
 from midifier.workflow import Dispatch
+from midifier.workflow import LogEvent
 from midifier.workflow import Manifest
 from midifier.workflow import Reporter
+from midifier.workflow import manifest
 
 MIDI_MEDIA_TYPE = "audio/midi"
 
@@ -144,7 +145,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/v1/workflow", response_model=Manifest, dependencies=[Depends(require_api_key)], tags=["workflow"])
     def workflow_manifest() -> Manifest:
         """How workflows.h4ks.com lists and prices transcription."""
-        return MANIFEST
+        return manifest(resolved)
 
     @app.post(
         "/v1/workflow/jobs",
@@ -157,7 +158,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Transcribe a workflows job and post its progress and result to its callback."""
         url = assert_public_url(str(dispatch.params.url))
         job = store.create(source=url)
-        store.watch(job.id, Reporter(dispatch, resolved))
+        reporter = Reporter(dispatch, resolved, on_ended=lambda: store.cancel(job.id))
+        store.watch(job.id, reporter)
+        reporter.send(LogEvent(kind="log", message="waiting for the GPU"))
         queue.submit(job.id)
         start(job.id, resolved, url=url)
         return JobAccepted(id=job.id, state=job.state)
@@ -202,8 +205,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         job = store.get(job_id)
         if job is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "no such job")
-        if not job.done:
-            store.update(job_id, state=JobState.CANCELLED)
+        store.cancel(job_id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.get("/v1/files/{key:path}", dependencies=[Depends(require_api_key)], tags=["files"])
