@@ -20,7 +20,9 @@ from dataclasses import dataclass
 
 import pretty_midi
 
-from midifier.midi.notes import chords
+# Onsets this close are one chord. Chaining each note against the one before it rather than
+# bucketing the timeline keeps two notes a millisecond apart together wherever they fall.
+CHORD_WINDOW = 0.06
 
 # Longest repeating figure searched for, in notes. Past roughly a bar the search stops
 # finding decoder loops and starts matching song structure.
@@ -179,7 +181,13 @@ def trim_loops(
 
 
 def _chord_events(notes: list[pretty_midi.Note]) -> list[tuple[frozenset[int], list[pretty_midi.Note]]]:
-    return [(frozenset(note.pitch for note in group), group) for group in chords(notes)]
+    grouped: list[list[pretty_midi.Note]] = []
+    for note in sorted(notes, key=lambda n: (n.start, n.pitch)):
+        if grouped and note.start - grouped[-1][0].start <= CHORD_WINDOW:
+            grouped[-1].append(note)
+        else:
+            grouped.append([note])
+    return [(frozenset(note.pitch for note in group), group) for group in grouped]
 
 
 def _repeating_tail(events: list[tuple[frozenset[int], list[pretty_midi.Note]]]) -> tuple[int, int]:

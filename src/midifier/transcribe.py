@@ -8,7 +8,8 @@ caps how far either travels. A closing segment also stops on its own rather than
 budget inventing an ending, so the extra audio a segmented run decodes largely pays for itself.
 
 What segmenting costs is instrument identity, since a segment decoded alone has no reason to
-name a part the way its neighbour did. `midi.parts` settles that for the whole song at once.
+name a part the way its neighbour did. So a quick scout of the whole song decides its
+instruments first, and every segment is decoded held to that list.
 
 The model is driven as a subprocess rather than imported. It owns process-wide state, its CLI
 is the interface its authors support, and a decode that wedges the GPU takes the subprocess
@@ -124,7 +125,15 @@ def _cut(source: Path, start: float, length: float, destination: Path) -> None:
     )
 
 
-def _decode(audio: Path, destination: Path, settings: Settings, timeout: float) -> pretty_midi.PrettyMIDI:
+def _decode(
+    audio: Path,
+    destination: Path,
+    settings: Settings,
+    timeout: float,
+    *,
+    instruments: list[str] | None = None,
+    scout: bool = False,
+) -> pretty_midi.PrettyMIDI:
     """Decode one piece of audio, retrying a decode that died on the accelerator.
 
     Some accelerators lack kernels for particular matrix shapes and hang rather than erroring,
@@ -134,12 +143,18 @@ def _decode(audio: Path, destination: Path, settings: Settings, timeout: float) 
     """
     model: ModelSize = settings.model_size
     attempts = settings.decode_attempts
-    precision = ["--dtype", settings.dtype] if settings.dtype else []
+    options = ["--dtype", settings.dtype] if settings.dtype else []
+    if instruments:
+        options += ["--instruments", parts.instrument_list(instruments)]
+    if scout:
+        # Unforced chunks drift at their joins, which ruins a transcription but not a list of
+        # instruments, and they decode in batches instead of one after another.
+        options.append("--no-prelude-forcing")
     while True:
         for attempt in range(1, attempts + 1):
             try:
                 _run(
-                    [str(audio), "-o", str(destination), "-f", "midi", "-m", model, "-d", settings.device, *precision],
+                    [str(audio), "-o", str(destination), "-f", "midi", "-m", model, "-d", settings.device, *options],
                     timeout,
                     settings,
                 )
@@ -175,30 +190,43 @@ def _is_transient(message: str) -> bool:
 def transcribe(audio: Path, settings: Settings, progress: Progress | None = None) -> Result:
     """Run the pipeline over one file and return a finished MIDI.
 
-    `progress` is called with (segments done, segments total) as each lands, so a caller can
-    report a wait measured from this song rather than from an average one.
+    `progress` is called with (steps done, steps total) after the scout and after each segment,
+    so a caller can report a wait measured from this song rather than from an average one.
     """
     duration = _audio_duration(audio)
     length = settings.segment_seconds
 
     with tempfile.TemporaryDirectory() as workspace:
         work = Path(workspace)
-        decoded: list[tuple[float, pretty_midi.PrettyMIDI]] = []
+        song = work / "song.wav"
+        _cut(audio, 0.0, duration, song)
+        whole = max(duration * TIMEOUT_MULTIPLIER, MIN_TIMEOUT_SECONDS)
         if duration <= length:
-            timeout = max(duration * TIMEOUT_MULTIPLIER, MIN_TIMEOUT_SECONDS)
-            decoded.append((0.0, _decode(audio, work / "out.mid", settings, timeout)))
+            offsets = [0.0]
+            clips = [song]
+            timeout = whole
         else:
-            timeout = max(length * TIMEOUT_MULTIPLIER, MIN_TIMEOUT_SECONDS)
             offsets = segments.plan(duration, length)
+            clips = [work / f"s{index}.wav" for index in range(len(offsets))]
+            for offset, clip in zip(offsets, clips, strict=True):
+                _cut(song, offset, length, clip)
+            timeout = max(length * TIMEOUT_MULTIPLIER, MIN_TIMEOUT_SECONDS)
+
+        steps = len(clips) + 1
+        if progress is not None:
+            progress(0, steps)
+        scouted = _decode(song, work / "scout.mid", settings, whole, scout=True)
+        instruments, dropped = parts.choose(scouted, offsets, length)
+        if progress is not None:
+            progress(1, steps)
+
+        decoded = []
+        for index, clip in enumerate(clips):
+            decoded.append(_decode(clip, work / f"s{index}.mid", settings, timeout, instruments=instruments))
             if progress is not None:
-                progress(0, len(offsets))
-            for index, offset in enumerate(offsets):
-                clip = work / f"s{index}.wav"
-                _cut(audio, offset, length, clip)
-                decoded.append((offset, _decode(clip, work / f"s{index}.mid", settings, timeout)))
-                if progress is not None:
-                    progress(index + 1, len(offsets))
-        midi, dropped = parts.assemble(decoded)
+                progress(index + 2, steps)
+
+        midi = parts.assemble(list(zip(offsets, decoded, strict=True)))
         report = cleanup.clean(midi, duration)
         output = work / "final.mid"
         midi.write(str(output))

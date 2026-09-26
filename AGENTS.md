@@ -57,7 +57,6 @@ src/midifier/
   jobs.py          job model and in-memory store
   midi/
     cleanup.py     repairs the decoder's characteristic defects
-    notes.py       reads chords out of a decode
     segments.py    where to cut a long decode
     parts.py       decides the song's instruments from every segment at once
 tests/             mirrors src; e2e/ needs the model and is opt-in

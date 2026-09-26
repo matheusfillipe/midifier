@@ -1,32 +1,47 @@
-"""The model runs as a subprocess, so what it inherits is part of the contract."""
+"""A quick scout decides the song's instruments, and every segment is decoded held to them."""
 
-import subprocess
+from pathlib import Path
 
+import pretty_midi
 import pytest
 
 from midifier.config import Settings
-from midifier.transcribe import _environment
-from midifier.transcribe import _run
+from midifier.transcribe import transcribe
 
 
-class TestModelEnvironment:
-    def test_the_configured_token_reaches_the_model(self) -> None:
-        """The weights are gated; without this a job fails only when it needs a new size."""
-        assert _environment(Settings(hf_token="hf_secret"))["HF_TOKEN"] == "hf_secret"
+def _write(path: Path, lanes: dict[str, int]) -> None:
+    midi = pretty_midi.PrettyMIDI()
+    for name, count in lanes.items():
+        lane = pretty_midi.Instrument(program=52 if name == "voice" else 71, name=name)
+        lane.notes = [
+            pretty_midi.Note(velocity=100, pitch=60, start=index * 0.5, end=index * 0.5 + 0.2) for index in range(count)
+        ]
+        midi.instruments.append(lane)
+    midi.write(str(path))
 
-    def test_no_token_configured_leaves_the_environment_alone(self) -> None:
-        assert "HF_TOKEN" not in _environment(Settings(hf_token=None))
 
+def test_every_segment_is_decoded_held_to_what_the_scout_heard(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
 
-class TestModelCommand:
-    def test_tempo_detection_is_turned_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """It runs a beat tracker per segment and stitching discards the result."""
-        seen: list[str] = []
+    def decoder(args: list[str], timeout: float, settings: Settings) -> None:
+        calls.append(args)
+        if "--no-prelude-forcing" in args:
+            # The whole song: a voice throughout, and a clarinet the scout barely used.
+            _write(Path(args[2]), {"voice": 198, "clarinet": 3})
+        else:
+            _write(Path(args[2]), {"voice": 60})
 
-        def record(args: list[str], **_: object) -> subprocess.CompletedProcess[str]:
-            seen.extend(args)
-            return subprocess.CompletedProcess(args, 0, "", "")
+    monkeypatch.setattr("midifier.transcribe._run", decoder)
+    monkeypatch.setattr("midifier.transcribe._audio_duration", lambda path: 100.0)
+    monkeypatch.setattr("midifier.transcribe._cut", lambda source, start, length, destination: destination.touch())
 
-        monkeypatch.setattr("midifier.transcribe.subprocess.run", record)
-        _run(["in.wav", "-o", "out.mid"], 60.0, Settings())
-        assert seen[seen.index("--detect-tempo") + 1] == "false"
+    progress: list[tuple[int, int]] = []
+    result = transcribe(tmp_path / "song.m4a", Settings(storage_backend="local"), lambda *step: progress.append(step))
+
+    scout, *segments = calls
+    assert Path(scout[0]).name == "song.wav"
+    assert "--instruments" not in scout
+    assert [call[call.index("--instruments") + 1] for call in segments] == ["voice", "voice"]
+    assert all("--no-prelude-forcing" not in call for call in segments)
+    assert progress[-1] == (3, 3)
+    assert [track.name for track in result.tracks] == ["voice"]
