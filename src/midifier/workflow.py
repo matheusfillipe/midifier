@@ -37,6 +37,7 @@ RETRY_DELAY_SECONDS = 5.0
 # workflows rejects longer text with a 422, which would leave its job running until it times out.
 MESSAGE_LIMIT = 500
 TITLE_LIMIT = 200
+DETAILS_LIMIT = 2000
 
 
 class StepEvent(TypedDict):
@@ -55,6 +56,7 @@ class ResultFile(TypedDict):
     url: str
     name: str
     mime: str
+    details: NotRequired[str]
 
 
 class ResultLink(TypedDict):
@@ -135,6 +137,24 @@ def _song_name(dispatch: Dispatch) -> str:
     return PurePosixPath(unquote(urlparse(str(dispatch.params.url)).path)).stem[:TITLE_LIMIT] or "song"
 
 
+def midi_details(job: Job) -> str | None:
+    """Describe the finished MIDI for agents that build on it: its tracks, tempo and length."""
+    if not job.tracks:
+        return None
+    tracks = ", ".join(
+        f"{track.name} ({'drums, ' if track.is_drum else f'program {track.program}, '}{track.note_count} notes)"
+        for track in job.tracks
+    )
+    parts = [f"Multi-track MIDI transcribed from a recording, {len(job.tracks)} tracks: {tracks}."]
+    if job.tempo:
+        parts.append(f"Tempo {job.tempo:.0f} BPM.")
+    if job.duration_seconds:
+        parts.append(f"Source length {job.duration_seconds:.0f} seconds.")
+    if job.dropped_instruments:
+        parts.append(f"Dropped instruments: {', '.join(job.dropped_instruments)}.")
+    return " ".join(parts)[:DETAILS_LIMIT]
+
+
 class Reporter:
     """Watches one job and posts what changes to the workflows callback, in order, off the worker thread.
 
@@ -166,7 +186,7 @@ class Reporter:
 
     def _event(self, job: Job) -> Event | None:
         if job.state is JobState.SUCCEEDED and job.midi_url:
-            return self._result(job.midi_url)
+            return self._result(job.midi_url, midi_details(job))
         if job.state is JobState.FAILED:
             return ErrorEvent(kind="error", message=(job.error or "transcription failed")[:MESSAGE_LIMIT])
         if job.state is not JobState.RUNNING or job.stage not in STEPS:
@@ -177,12 +197,15 @@ class Reporter:
             step["total"] = job.segments_total
         return step
 
-    def _result(self, midi_url: str) -> ResultEvent:
+    def _result(self, midi_url: str, details: str | None) -> ResultEvent:
         player = f"{self._player_url}?url={quote(midi_url, safe='')}&name={quote(self._song, safe='')}"
+        midi = ResultFile(url=midi_url, name=f"{self._song[: TITLE_LIMIT - 4]}.mid", mime="audio/midi")
+        if details:
+            midi["details"] = details
         return ResultEvent(
             kind="result",
             title=self._song,
-            files=[ResultFile(url=midi_url, name=f"{self._song[: TITLE_LIMIT - 4]}.mid", mime="audio/midi")],
+            files=[midi],
             links=[ResultLink(label="open in kinesthesia", url=player)],
         )
 

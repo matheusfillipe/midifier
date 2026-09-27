@@ -13,6 +13,7 @@ from midifier.config import Settings
 from midifier.jobs import JobState
 from midifier.jobs import JobStore
 from midifier.jobs import Stage
+from midifier.jobs import Track
 from midifier.state import store as shared_store
 from midifier.workflow import Dispatch
 from midifier.workflow import Reporter
@@ -98,12 +99,29 @@ class TestReporter:
     def test_posts_the_midi_with_a_kinesthesia_link(self, settings: Settings, workflows: Workflows) -> None:
         store, job_id, reporter = watched(settings)
 
-        store.update(job_id, state=JobState.SUCCEEDED, stage=None, midi_url=MIDI)
+        tracks = [
+            Track(name="Piano", program=0, is_drum=False, note_count=412),
+            Track(name="Drums", program=0, is_drum=True, note_count=800),
+        ]
+        store.update(
+            job_id,
+            state=JobState.SUCCEEDED,
+            stage=None,
+            midi_url=MIDI,
+            tracks=tracks,
+            tempo=120.0,
+            duration_seconds=30.0,
+            dropped_instruments=["Flute"],
+        )
         finish(reporter)
 
         [result] = workflows.events
         assert result["title"] == "My Song"
-        assert result["files"] == [{"url": MIDI, "name": "My Song.mid", "mime": "audio/midi"}]
+        details = (
+            "Multi-track MIDI transcribed from a recording, 2 tracks: Piano (program 0, 412 notes), "
+            "Drums (drums, 800 notes). Tempo 120 BPM. Source length 30 seconds. Dropped instruments: Flute."
+        )
+        assert result["files"] == [{"url": MIDI, "name": "My Song.mid", "mime": "audio/midi", "details": details}]
         links = result["links"]
         assert isinstance(links, list)
         [link] = links
