@@ -13,7 +13,13 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 ENV VIRTUAL_ENV=/opt/venv \
     PATH=/opt/venv/bin:$PATH \
     HF_HOME=/models/huggingface \
-    XDG_CACHE_HOME=/models/cache
+    XDG_CACHE_HOME=/models/cache \
+    UV_NO_CACHE=1
+
+# We install as the service user, since a chown -R afterwards copies the whole virtualenv into
+# a new layer and doubles the image.
+RUN adduser --system --uid 1000 app && install -d -o app /opt/venv /app /models
+USER app
 
 RUN uv venv $VIRTUAL_ENV
 
@@ -22,13 +28,8 @@ RUN uv pip install "muscriptor==${MUSCRIPTOR}" && \
     python -c "import torch, torchaudio, muscriptor; print('torch', torch.__version__, 'cuda', torch.version.cuda)"
 
 WORKDIR /app
-COPY . .
+COPY --chown=app . .
 RUN uv pip install -e .
-
-RUN adduser --system --uid 1000 app && \
-    mkdir -p /models && \
-    chown -R app /app /opt/venv /models
-USER app
 
 EXPOSE 8000
 

@@ -36,7 +36,13 @@ ENV VIRTUAL_ENV=/opt/venv \
     PYTORCH_HIP_ALLOC_CONF=expandable_segments:False \
     HSA_OVERRIDE_GFX_VERSION=11.0.0 \
     HF_HOME=/models/huggingface \
-    XDG_CACHE_HOME=/models/cache
+    XDG_CACHE_HOME=/models/cache \
+    UV_NO_CACHE=1
+
+# We install as the service user, since a chown -R afterwards copies the whole virtualenv into
+# a new layer and doubles the image.
+RUN adduser --system --uid 1000 app && install -d -o app /opt/venv /app /models
+USER app
 
 RUN uv venv $VIRTUAL_ENV
 
@@ -59,16 +65,11 @@ RUN printf 'torch==%s\ntorchaudio==%s\n' "${ROCM_TORCH}" "${ROCM_TORCH}" > /tmp/
     uv pip install --constraint /tmp/torch.txt "muscriptor==${MUSCRIPTOR}"
 
 WORKDIR /app
-COPY . .
+COPY --chown=app . .
 
 # The project's own dependencies resolve normally; none of them touch torch, so the ROCm
 # build installed above is left alone. Only muscriptor needed --no-deps.
 RUN uv pip install -e .
-
-RUN adduser --system --uid 1000 app && \
-    mkdir -p /models && \
-    chown -R app /app /opt/venv /models
-USER app
 
 EXPOSE 8000
 

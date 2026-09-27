@@ -6,17 +6,20 @@ RUN apt-get update && \
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+# We install as the service user, since a chown -R afterwards copies the whole virtualenv into
+# a new layer and doubles the image.
+RUN adduser --system app && install -d -o app /app
+USER app
+ENV UV_NO_CACHE=1
+
 WORKDIR /app
 
 # Lockfile first, so dependency layers survive a source change.
-COPY pyproject.toml uv.lock ./
+COPY --chown=app pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-COPY . .
+COPY --chown=app . .
 RUN uv sync --frozen --no-dev
-
-RUN adduser --system app && chown -R app /app
-USER app
 
 EXPOSE 8000
 
